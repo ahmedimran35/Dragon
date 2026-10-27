@@ -19,6 +19,7 @@ from dragon.search import SearchResult, WebSearchProvider, _region
 from dragon.server.api import create_app
 from dragon.server.service import DragonService
 from dragon.tools import WebSearch
+from dragon.tools.web import BROWSER_NUDGE
 from dragon.vault import CredentialVault
 
 DDG_ROWS = [
@@ -612,7 +613,7 @@ async def test_tool_renders_results_and_the_note(wire: Wire, ddg):
         "web": {"results": [{"title": "A", "url": "https://a.example", "description": "first"}]}
     }
     out = await tool.execute(query="dragon", max_results=1)
-    assert out.output == "1. A\n   https://a.example\n   first"
+    assert out.output == "1. A\n   https://a.example\n   first\n\n" + BROWSER_NUDGE
     wire.status = 429
     out = await tool.execute(query="dragon", max_results=2)
     lines = out.output.splitlines()

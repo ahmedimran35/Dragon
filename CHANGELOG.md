@@ -6,10 +6,11 @@ All notable changes to Dragon are recorded here. The format follows
 ## [Unreleased]
 
 - The agent now takes website work to the browser by itself: when the job happens on a
-  site — searching anything and working through the results, comparing options, reading a
-  map or a listing, filling a form, signing in, buying or booking — it opens the `browser`
+  site (searching anything and working through the results, comparing options, reading a
+  map or a listing, filling a form, signing in, buying or booking) it opens the `browser`
   tool and finishes on the page, instead of answering from `web_search`/`web_fetch` text.
-  The rule is in the system prompt and in the three tool descriptions.
+  The rule is in the system prompt and the three tool descriptions, and every search and
+  fetch ends with one line pointing at the browser, where a weak model looks last.
 - A watching panel for the agent's browser, on the right of a wide window (the globe in
   the sidebar): the page it is on updates frame by frame as it works, with what it did to
   get there, the trail of pages it looked at, and the same controls as the viewer sheet —

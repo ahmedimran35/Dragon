@@ -21,6 +21,14 @@ from dragon.tools.base import BaseTool, CallAssessment, int_arg
 
 USER_AGENT = f"Mozilla/5.0 (X11; Linux x86_64) Dragon/{__version__}"
 
+# The line every search and fetch ends with. Tool output is where the model looks last, and
+# a weak one has to be told there that site work continues on the page, not in more fetches.
+BROWSER_NUDGE = (
+    "If the task is to work a website rather than read about it (search through its results, "
+    "compare options, fill a form, sign in, buy or book), open it with the `browser` tool and "
+    "finish the job on the page."
+)
+
 
 def host_of(url: str) -> str | None:
     try:
@@ -176,7 +184,7 @@ class WebSearch(BaseTool):
         lines = [r.render(i) for i, r in enumerate(results, 1)]
         if note:
             lines.insert(0, f"({note})")
-        return ToolResult(output="\n".join(lines))
+        return ToolResult(output="\n".join(lines) + "\n\n" + BROWSER_NUDGE)
 
 
 class WebFetch(BaseTool):
@@ -236,7 +244,9 @@ class WebFetch(BaseTool):
             return ToolResult(output=text[:max_chars], error=f"HTTP {resp.status_code}")
         if len(text) > max_chars:
             text = text[:max_chars] + f"\n... [truncated, {len(text)} chars total]"
-        return ToolResult(output=f"URL: {resp.url}\nContent-Type: {ctype}\n\n{text}")
+        return ToolResult(
+            output=f"URL: {resp.url}\nContent-Type: {ctype}\n\n{text}\n\n" + BROWSER_NUDGE
+        )
 
 
 def _to_text(resp: httpx.Response, ctype: str) -> str:

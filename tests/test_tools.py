@@ -525,6 +525,27 @@ async def test_web_fetch_reads_a_compressed_page_once(monkeypatch: pytest.Monkey
     assert resp.content == page[:100]
 
 
+async def test_web_fetch_ends_with_the_browser_nudge(monkeypatch: pytest.MonkeyPatch):
+    """A fetch ends by pointing at the browser: site work happens on the page, and a weak
+    model needs saying so where it reads its tool results."""
+    from typing import Any
+
+    from dragon.tools import web as web_mod
+
+    async def fake_fetch(url: str, **kwargs: Any) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"<html><body>hi</body></html>",
+            headers={"content-type": "text/html"},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(web_mod, "fetch_public", fake_fetch)
+    out = await web_mod.WebFetch().execute(url="https://public.example/")
+    assert out.output.startswith("URL: https://public.example/")
+    assert web_mod.BROWSER_NUDGE in out.output
+
+
 class _Chunks(httpx.AsyncByteStream):
     def __init__(self, gen):  # noqa: ANN001
         self._gen = gen
