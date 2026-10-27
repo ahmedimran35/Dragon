@@ -5,6 +5,13 @@ All notable changes to Dragon are recorded here. The format follows
 
 ## [Unreleased]
 
+- A watching panel for the agent's browser, on the right of a wide window (the globe in
+  the sidebar): the page it is on updates frame by frame as it works, with what it did to
+  get there, the trail of pages it looked at, and the same controls as the viewer sheet —
+  take the page, click it, type into it, open a URL, hand it back. It opens itself when
+  browsing starts. On a phone, tapping a frame in the chat is still the way in. The
+  runtime keeps 40 frames per chat in memory now (was 12) so the trail is worth looking
+  at.
 - The Ideas tab is now the **Tasks** tab. It holds what needs you right now (an approval,
   a question, a goal's proposed plan change, a goal past its date), what Ember suggests
   from what it knows, what it is working on, what is ready for a look, and what was

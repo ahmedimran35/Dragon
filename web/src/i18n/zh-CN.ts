@@ -236,6 +236,14 @@ const zhCN: Record<string, string> = {
   resolved: "已解决",
   reopened: "已重新打开",
   finished: "已结束",
+
+  // ── The browser watching panel ────────────────────────────────────────────────────
+  "Resize the panel": "调整面板宽度",
+  "The browser is quiet.": "浏览器现在很安静。",
+  "When {name} uses the browser, every page it opens shows up here.": "当 {name} 使用浏览器时，它打开的每个页面都会显示在这里。",
+  "Turn it on under Settings → Model → Connections → Browser.": "在「设置 → 模型 → 连接 → 浏览器」里打开它。",
+  "What it looked at": "它看过的页面",
+  "Back to live": "回到实时画面",
   // the areas feed posts fall into
   Planning: "规划",
   Research: "调研",

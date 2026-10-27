@@ -1,4 +1,4 @@
-import { Bug, LayoutGrid, ListChecks, Menu, MessageCircle, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, Wrench, X } from "lucide-react";
+import { Bug, Globe, LayoutGrid, ListChecks, Menu, MessageCircle, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, Wrench, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { useDeveloperTools } from "../devtools";
 import { useT } from "../i18n";
@@ -23,7 +23,7 @@ function bugReportUrl(_version: string): string {
  * screens as the narrow layout; nothing here is a second implementation of anything.
  */
 export function Sidebar() {
-  const { state, setTab, openThread } = useStore();
+  const { state, setTab, openThread, setBrowserOpen } = useStore();
   const t = useT();
   const [activityOpen, setActivityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -108,6 +108,20 @@ export function Sidebar() {
         </nav>
 
         <div className="flex w-full flex-col items-center gap-0.5 px-2 pb-3 pt-2">
+          <button
+            type="button"
+            onClick={() => setBrowserOpen(!state.browserOpen)}
+            aria-pressed={state.browserOpen}
+            className={cx(railButton(state.browserOpen), state.browserOpen && "bg-surface-2 text-fg")}
+          >
+            <span className="relative">
+              <Globe size={21} className={state.browserOpen ? "text-accent" : "text-fg/60"} />
+              {state.browser.latest?.status === "live" && (
+                <span className="absolute -right-1 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-rose-500" />
+              )}
+            </span>
+            <span className="max-w-full truncate">{t("Browser")}</span>
+          </button>
           <button type="button" onClick={() => setTab("you")} aria-current={state.tab === "you" ? "page" : undefined} className={railButton(state.tab === "you")}>
             <SlidersHorizontal size={21} className={state.tab === "you" ? "text-accent" : "text-fg/60"} />
             <span className="max-w-full truncate">{t("Settings")}</span>

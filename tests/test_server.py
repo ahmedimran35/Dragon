@@ -2375,6 +2375,33 @@ def test_browser_frames_make_one_live_card_per_run(server):
     )
 
 
+def test_browser_frames_are_capped_but_keep_the_trail(server):
+    """The watching panel shows the trail of what the agent looked at: the last frames
+    stay in memory and older ones are dropped."""
+    from dragon.server.webui import _FRAMES_KEPT
+    from dragon.tools.browser import BrowserFrame
+
+    client, service, _ = server
+    ui = service.ui
+    ui.begin_run("main")
+    token = current_thread.set("main")
+    first = ""
+    try:
+        for i in range(_FRAMES_KEPT + 5):
+            ui.on_browser_frame(
+                BrowserFrame(f"https://a.example/{i}", f"P{i}", f"Opened {i}", b"\xff\xd8data")
+            )
+            if i == 0:
+                first = next(iter(ui.browser_frames["main"]))
+    finally:
+        current_thread.reset(token)
+    ui.end_run("main")
+    assert len(ui.browser_frames["main"]) == _FRAMES_KEPT
+    assert ui.browser_frame("main", first) is None, "the oldest frame is dropped"
+    card = events_of(client, kind="browser")[0]
+    assert ui.browser_frame("main", card["frame"]) is not None
+
+
 def _chromium_available() -> bool:
     try:
         from playwright.sync_api import sync_playwright

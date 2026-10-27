@@ -27,8 +27,9 @@ current_thread: contextvars.ContextVar[str] = contextvars.ContextVar(
     "dragon_thread", default=MAIN_THREAD
 )
 
-# browser frames kept per thread (in memory; a restart clears them)
-_FRAMES_KEPT = 12
+# browser frames kept per thread (in memory; a restart clears them). The watching panel
+# shows this many as the trail of what the agent looked at, so it is not just one frame.
+_FRAMES_KEPT = 40
 
 _TOOL_LABELS = {
     "web_search": "Searching the web",

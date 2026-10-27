@@ -2,6 +2,7 @@ import { LayoutGrid, ListChecks, Loader2, MessageCircle, Newspaper, SquareCheckB
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { setToken } from "./api";
 import { BrandMark } from "./components/BrandMark";
+import { BrowserPanel } from "./components/BrowserPanel";
 import { Sidebar } from "./components/Sidebar";
 import { ChatScreen } from "./screens/ChatScreen";
 import { FeedScreen } from "./screens/FeedScreen";
@@ -149,6 +150,8 @@ export default function App() {
           </ul>
         </nav>
       </div>
+      {/* the agent's browser, live, on the right of a wide window (a phone taps a frame in the chat instead) */}
+      {!state.lite && state.browserOpen && <BrowserPanel />}
       <div className="pointer-events-none hidden w-0" />
       {state.toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-[70] flex justify-center px-4">

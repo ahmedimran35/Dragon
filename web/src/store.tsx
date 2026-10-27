@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, AuthError, connectWs, getToken } from "./api";
+import { emptyWatch, trackBrowser, type BrowserWatch } from "./browser";
 import { getLocale, t } from "./i18n";
 import { registerWorker, setAppBadge } from "./push";
 import { useTheme } from "./theme";
@@ -70,6 +71,7 @@ export interface CodingLive {
 }
 
 const FEED_SEEN_KEY = "dragon_feed_seen";
+const BROWSER_OPEN_KEY = "dragon_browser_open";
 
 export interface Stream {
   id: string;
@@ -108,6 +110,10 @@ export interface AppState {
   tasksVersion: number;
   /** ISO time of the newest Feed item you have looked at. */
   feedSeenAt: string;
+  /** The agent's browser across every chat: the frame on screen and the trail before it. */
+  browser: BrowserWatch;
+  /** Whether the watching panel is open (a wide window; phones use the viewer sheet). */
+  browserOpen: boolean;
   /** Path of the workspace file open in the viewer, if any. */
   viewer: string | null;
   /** Text to put in the chat composer next time it shows (e.g. "/weekly-review "). */
@@ -166,6 +172,7 @@ type Action =
   | { type: "settings"; settings: SettingsView }
   | { type: "tab"; tab: Tab }
   | { type: "drawer"; open: boolean }
+  | { type: "browserPanel"; open: boolean }
   | { type: "feedSeen"; at: string }
   | { type: "viewer"; path: string | null }
   | { type: "draft"; text: string | null }
@@ -226,6 +233,8 @@ const initial: AppState = {
   tab: "chat",
   toast: null,
   drawer: false,
+  browser: emptyWatch,
+  browserOpen: readStorage(BROWSER_OPEN_KEY) === "1",
   finishedAt: 0,
   mishapAt: 0,
   codingLive: {},
@@ -347,6 +356,9 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, tab: action.tab };
     case "drawer":
       return { ...state, drawer: action.open };
+    case "browserPanel":
+      writeStorage(BROWSER_OPEN_KEY, action.open ? "1" : "");
+      return { ...state, browserOpen: action.open };
     case "feedSeen":
       writeStorage(FEED_SEEN_KEY, action.at);
       return { ...state, feedSeenAt: action.at };
@@ -384,12 +396,19 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
       // fetched when opened. The approvals queue and the Feed follow every thread.
       const loaded = state.events[ev.thread] !== undefined;
       const mishap = (ev.type === "tool" && (ev.status === "error" || ev.status === "blocked")) || (ev.type === "notice" && ev.level === "error");
+      // the watching panel follows the browser wherever it happens; the first frame of a
+      // run opens it on a wide window (on a phone the panel is hidden and the viewer sheet
+      // is the way in)
+      const browsing = ev.type === "browser" ? trackBrowser(state.browser, ev) : state.browser;
+      const open = ev.type === "browser" && msg.kind === "event" && ev.status === "live" ? true : state.browserOpen;
       return {
         ...state,
         streams,
         threads,
         events: loaded ? { ...state.events, [ev.thread]: upsertEvent(state.events[ev.thread], ev) } : state.events,
         holds: ev.type === "hold" ? upsertHold(state.holds, ev) : state.holds,
+        browser: browsing,
+        browserOpen: open,
         pendingApprovals: upsertApproval(state.pendingApprovals, ev),
         feedVersion: isFeedWorthy(ev) ? state.feedVersion + 1 : state.feedVersion,
         mishapAt: mishap ? Date.now() : state.mishapAt,
@@ -543,6 +562,8 @@ interface StoreValue {
   setTab: (tab: Tab) => void;
   /** Open or close the chats drawer (the round hamburger). */
   setDrawer: (open: boolean) => void;
+  /** Open or close the browser watching panel (wide windows). */
+  setBrowserOpen: (open: boolean) => void;
   openThread: (thread: string) => void;
   markFeedSeen: (at: string) => void;
   openFile: (path: string | null) => void;
@@ -757,6 +778,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDrawer: (open) => dispatch({ type: "drawer", open }),
       openThread: (thread) => dispatch({ type: "activeThread", thread }),
       markFeedSeen: (at) => dispatch({ type: "feedSeen", at }),
+      setBrowserOpen: (open) => dispatch({ type: "browserPanel", open }),
       openFile: (path) => dispatch({ type: "viewer", path }),
       draftFiles: (files) => dispatch({ type: "draftFiles", files }),
       draft: (text) => {
