@@ -1,0 +1,80 @@
+name: Docker image
+
+# Builds the `dragon` image and pushes it only when a registry is configured:
+#
+#   repository variable DOCKER_REGISTRY   e.g. ghcr.io/<owner>  (empty = build-only)
+#   repository secrets  DOCKER_USERNAME, DOCKER_PASSWORD
+#
+# With a registry:   main -> :edge,  tag vX.Y.Z -> :X.Y.Z, :X.Y, :latest
+#                    (a pre-release tag like v0.1.0-rc1 gets :X.Y.Z-rc1 only)
+# Without one: every run (including tags) is a build-only check of the Dockerfile.
+# Pull requests are covered by the docker job in ci.yml.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build ${{ vars.DOCKER_REGISTRY && 'and push' || 'only' }}
+    runs-on: ubuntu-latest
+    # the arm64 half under QEMU when pushing: about ten minutes, rarely twenty
+    timeout-minutes: 90
+    env:
+      REGISTRY: ${{ vars.DOCKER_REGISTRY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in
+        if: env.REGISTRY != ''
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Image tags
+        id: meta
+        if: env.REGISTRY != ''
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/dragon
+          flavor: latest=false
+          tags: |
+            type=edge,branch=main
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+          labels: |
+            org.opencontainers.image.title=Dragon
+            org.opencontainers.image.description=Dragon: a self-hosted, web-only personal agent runtime. The agent, the Sentinel that decides what may run, and the web app. Bring your own model.
+            org.opencontainers.image.licenses=GPL-3.0-or-later
+
+      - name: "Build ${{ env.REGISTRY != '' && 'and push' || 'build-only (no registry configured)' }}"
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ env.REGISTRY != '' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ env.REGISTRY != '' }}
+          load: ${{ env.REGISTRY == '' }}
+          tags: ${{ steps.meta.outputs.tags || 'dragon:ci' }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test (build-only runs)
+        if: env.REGISTRY == ''
+        run: docker run --rm dragon:ci dragon --version

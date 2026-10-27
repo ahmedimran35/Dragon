@@ -1,0 +1,39 @@
+# Dependency updates, batched so they do not flood the PR list: one PR per ecosystem, once
+# a month, merged when the checks are green (CONTRIBUTING.md, "Pull requests").
+version: 2
+updates:
+  # No pip entry. The Python package declares lower bounds only (`httpx>=0.27`) and commits
+  # no lock file: CI, the Docker image and `uv pip install -e .` all resolve the newest
+  # release every time, so there is no pin for Dependabot to move. A `uv` entry would need
+  # a committed uv.lock that every install path then honours (`uv sync --locked`); the
+  # project chose the ranges instead (.gitignore, uv.lock). Security advisories do not
+  # depend on this file.
+
+  # the web app: minors and patches in one PR. React, TypeScript, Vite and the icon set
+  # change their APIs on majors; those are upgrades someone does by hand, with the app open.
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: monthly
+    groups:
+      web:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    labels: ["dependencies"]
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # GitHub Actions: the workflows pin every action by commit SHA with a version comment;
+  # Dependabot moves the SHA and the comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: ci
+      include: scope

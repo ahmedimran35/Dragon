@@ -1,0 +1,271 @@
+# Dragon configuration
+# Copy to config/config.toml (or ~/.dragon/config.toml) and edit.
+# String values may reference environment variables: "${VAR}" or "${VAR:-default}".
+# Secrets belong in the environment or the vault (`dragon vault set NAME`), not here.
+
+# Where memory, goals, vault, audit log and sessions are stored.
+data_dir = "~/.dragon"
+log_level = "INFO"
+
+# ------------------------------------------------------------------------------
+# The agent
+# ------------------------------------------------------------------------------
+[agent]
+name = "Ember"                 # the agent's name; it signs its replies with it
+max_steps = 30                 # the most one request may take before the agent is asked to wrap up
+# workspace = "./workspace"    # the agent's files. Default: ./workspace when the current directory has one, else <data_dir>/workspace
+extra_roots = []               # directories outside the workspace the files tool may use, e.g. ["~/Documents/notes"]
+language = "auto"              # "auto" | "zh" | "en" | ...
+max_context_messages = 80      # how much of the conversation is resent each turn
+max_context_images = 4         # newest N screenshots kept in the request; older ones become a note (0 keeps all)
+show_thinking = false          # show the model's reasoning in the web app
+user_profile = ""              # free text about you, injected into the system prompt
+instructions = ""              # extra standing instructions for the agent
+
+# ------------------------------------------------------------------------------
+# [llm] the chat model: any OpenAI-compatible endpoint. Pick ONE preset below.
+# ------------------------------------------------------------------------------
+[llm]
+provider = "openai"            # "openai" = Chat Completions API; "openai_responses" = Responses API; or a catalogue id (dragon/llm/providers.json)
+model = "deepseek-flash"
+base_url = "https://api.deepseek.com"
+api_key = "${DEEPSEEK_API_KEY}"
+
+# --- OpenAI -------------------------------------------------------------------
+# model = "gpt-5.6-sol"
+# base_url = "https://api.openai.com/v1"
+# api_key = "${OPENAI_API_KEY}"
+
+# --- Anthropic (its OpenAI-compatible endpoint) -------------------------------
+# model = "claude-fable-5-1"
+# base_url = "https://api.anthropic.com/v1"
+# api_key = "${ANTHROPIC_API_KEY}"
+
+# --- OpenRouter ---------------------------------------------------------------
+# model = "deepseek/deepseek-flash"
+# base_url = "https://openrouter.ai/api/v1"
+# api_key = "${OPENROUTER_API_KEY}"
+
+# --- Ollama / LM Studio (local, private) --------------------------------------
+# Ollama:  ollama serve && ollama pull qwen3:32b
+# LM Studio: start the local server (default http://127.0.0.1:1234/v1)
+# model = "qwen3:32b"
+# base_url = "http://127.0.0.1:11434/v1"    # Ollama; LM Studio: http://127.0.0.1:1234/v1
+# api_key = "ollama"                        # any non-empty string; local servers do not check it
+
+# --- A gateway that needs extra headers ---------------------------------------
+# model = "my-app-id"
+# base_url = "https://gateway.example.com/v1"
+# api_key = "${GATEWAY_API_KEY}"
+# extra_headers = { "X-End-User-Id" = "ember" }
+
+max_tokens = 4096              # the most tokens one reply may have
+temperature = 0.3
+timeout = 180                  # seconds before one request is retried
+max_retries = 5
+stream = true                  # show text as it is generated; false for proxies that drop tokens mid-stream
+tool_mode = "auto"             # auto (function calls, falling back to prompt tools) | native | prompt
+vision = "auto"                # auto (try images, fall back to text) | on | off for pictures attached in chat
+pass_reasoning = false         # echo reasoning_content back with tool calls (some DeepSeek endpoints want it)
+# extra_body = { "thinking" = { "type" = "enabled" } }
+# proxy = "http://127.0.0.1:7890"   # an HTTP(S)/SOCKS proxy for this slot only
+
+# ------------------------------------------------------------------------------
+# [gui] the screen operator's vision model: what looks at screenshots for the
+# browser tool and the computer hands. Empty fields follow [llm].
+# ------------------------------------------------------------------------------
+[gui]
+provider = "openai"            # openai | openai_responses | a catalogue id
+model = ""                     # empty → a vision-capable model from [llm]'s provider
+base_url = ""                  # empty → [llm]'s base_url
+api_key = ""                   # or "${GUI_API_KEY}" when it differs from [llm]'s key
+max_steps = 0                  # the most one screen task may take; 0 = no cap
+device_timeout_s = 20.0        # how long one screen action may take
+reconnect_grace_s = 30.0       # how long a running task waits for a dropped connection
+
+# ------------------------------------------------------------------------------
+# [image] and [video]: where the avatar studio draws pictures and clips.
+# All empty (the default): the chat provider's own image/video model when it has
+# one, else none. `provider` is a catalogue id; base_url fills in from it.
+# ------------------------------------------------------------------------------
+# [image]
+# provider = "bailian"              # bailian | zhipu | siliconflow | volcengine | openai | gemini | openrouter | xai
+# model = ""                        # empty → the catalogue's default for the provider
+# base_url = ""                     # instead of provider, for a host the catalogue does not list
+# api_key = "${IMAGE_API_KEY}"      # empty → the chat model's key when the host is the same
+#
+# [video]
+# provider = "bailian"
+# model = ""                        # empty → the catalogue's default
+# base_url = ""
+# api_key = "${VIDEO_API_KEY}"
+
+# ------------------------------------------------------------------------------
+# Sentinel: the gatekeeper between the agent and the world.
+# ------------------------------------------------------------------------------
+[sentinel]
+# ask    : safe/moderate actions run freely, sensitive ones need your approval (default)
+# strict : moderate AND sensitive actions need approval
+# auto   : approve everything except explicit deny rules (unattended runs)
+mode = "ask"
+always_ask_tools = ["send_email", "shell"]   # these always ask, whatever the mode
+always_allow_tools = []                      # these never ask
+deny_tools = []                              # these never run
+# Once the agent has read private data (email, memories, files outside the workspace)
+# it may only reach these hosts without asking.
+egress_allowlist = [
+  "duckduckgo.com", "*.duckduckgo.com",
+  "wikipedia.org", "*.wikipedia.org",
+  "github.com", "*.github.com", "*.githubusercontent.com",
+  "pypi.org", "*.pypi.org",
+]
+taint_tracking = true          # mark private data and follow where it goes
+
+# Fine-grained rules (first match wins). `match` values are glob patterns on arguments.
+[[sentinel.rules]]
+tool = "shell"
+match = { command = "*rm -rf*" }
+action = "deny"
+reason = "recursive deletes are not allowed"
+
+[[sentinel.rules]]
+tool = "files"
+match = { action = "write", path = "*.env" }
+action = "ask"
+reason = "writing dotenv files"
+
+# ------------------------------------------------------------------------------
+[memory]
+enabled = true
+max_inject = 20                # memories injected into the system prompt
+# Recall by meaning on top of keyword recall: memories are embedded once through an
+# OpenAI-compatible /embeddings endpoint. auto: the model's endpoint when it has
+# embeddings, keywords when it does not. on: insist. off: keywords only.
+embeddings = "auto"
+# embedding_base_url = "http://127.0.0.1:11434/v1"   # e.g. Ollama next to a cloud chat model
+# embedding_model = "qwen3-embedding:0.6b"           # empty → the endpoint's default
+# embedding_api_key = "${EMBEDDINGS_API_KEY}"        # empty → the model's key
+
+# ------------------------------------------------------------------------------
+# Connectors
+# ------------------------------------------------------------------------------
+[connectors.email]
+enabled = false
+imap_host = "imap.gmail.com"
+imap_port = 993
+smtp_host = "smtp.gmail.com"
+smtp_port = 587
+smtp_starttls = true
+# Store the password with: dragon vault set EMAIL_ADDRESS / EMAIL_PASSWORD
+address = "${EMAIL_ADDRESS}"
+password = "${EMAIL_PASSWORD}"
+scrub_secrets = true           # strip one-time codes / reset links before the model reads mail
+
+[connectors.calendar]
+enabled = false
+refresh_minutes = 30           # how often the feeds are re-read
+day_start = "09:00"            # working hours, for "when am I free"
+day_end = "18:00"
+# Private .ics links (Google: Settings → Integrate calendar → Secret address in iCal
+# format; Outlook: Shared calendars → Publish; iCloud: Share Calendar → Public Calendar)
+# or .ics files. The link is the secret.
+# [[connectors.calendar.feeds]]
+# name = "Work"
+# url = "${CALENDAR_WORK}"
+
+[connectors.contacts]
+# The address book: .vcf exports (Google Contacts, iCloud, Outlook) as files or links,
+# plus the people the agent is told about in chat (<data_dir>/contacts.vcf).
+enabled = true
+# [[connectors.contacts.sources]]
+# name = "Google"
+# url = "~/Downloads/contacts.vcf"     # or a link: "${CONTACTS_GOOGLE}"
+
+[connectors.search]
+# Who answers web_search. DuckDuckGo needs no key; Brave, Tavily and Serply take one;
+# SearXNG is the URL of an instance you run. A failed search falls back to DuckDuckGo once.
+provider = "duckduckgo"        # duckduckgo | brave | tavily | serply | you | searxng
+# api_key = "${SEARCH_API_KEY}"        # brave / tavily / serply / you
+# base_url = "http://127.0.0.1:8080"   # searxng
+# fallback = false                     # a failed search fails instead of going to DuckDuckGo
+
+# ------------------------------------------------------------------------------
+[triggers]
+# Work that starts when something happens (set in chat or under Upcoming): a mail
+# trigger has the inbox looked at this often; a webhook refuses deliveries closer
+# together than this many seconds.
+mail_poll_minutes = 5
+hook_min_seconds = 10
+
+# ------------------------------------------------------------------------------
+[skills]
+# How a job is done, written down once: folders with a SKILL.md (the Agent Skills
+# format). Built-in skills ship with the runtime; yours go in <data_dir>/skills (or
+# `dir`), and a folder with the same name as a built-in replaces it.
+enabled = true
+# dir = "~/my-skills"
+# disabled = ["inbox-triage"]   # built-in skills to leave out of the model's list
+
+# ------------------------------------------------------------------------------
+[sandbox]
+# Linux + bubblewrap (apt install bubblewrap): every shell / python_execute call runs in
+# its own namespace: only the workspace is writable, home is not there, and there is no
+# network unless the command needs it. auto: use it when it works here (default);
+# bwrap: insist; off: run commands unboxed with the scrubbed environment only.
+mode = "auto"
+# share_read_only = ["~/.nvm"]   # programs the box may use (e.g. node)
+# share = ["~/.cache/tool"]      # state a tool also writes (its login, a token it refreshes)
+
+# ------------------------------------------------------------------------------
+[browser]
+enabled = false                # pip install "dragon[browser]" && playwright install chromium
+headless = true
+timeout_ms = 30000
+
+# ------------------------------------------------------------------------------
+# Hands on this computer: the screen, the mouse and the keyboard of the machine the
+# runtime runs on (docs/browser-and-hands.md). The model, the step cap and the
+# sensitive actions are [gui]'s and the Sentinel's.
+# ------------------------------------------------------------------------------
+[hands]
+enabled = false
+backend = "auto"               # auto | desktop | pyautogui | xdotool
+mode = "auto"                  # auto | screen | window (window = one app's window on macOS)
+coords = "pixels"              # pixels | norm1000: what the model's x, y mean
+max_image_width = 1600         # widest screenshot handed to the model
+settle_s = 0.6                 # pause after each action before the next screenshot
+
+# ------------------------------------------------------------------------------
+# MCP servers: reuse the ecosystem instead of writing connectors.
+# url, args and env accept ${VAR} references; keys go in the vault.
+# ------------------------------------------------------------------------------
+# [[mcp.servers]]
+# name = "filesystem"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "./workspace"]
+# risk = "moderate"                # safe | moderate | sensitive
+#
+# [[mcp.servers]]
+# name = "calendar"
+# url = "http://localhost:8000/mcp"
+# risk = "sensitive"
+# reads_private_data = true
+#
+# Remote servers that carry a key in the URL:
+# [[mcp.servers]]
+# name = "maps"
+# url = "https://mcp.example.com/mcp?key=${MAPS_KEY}"
+# risk = "safe"
+# egress = true
+
+# ------------------------------------------------------------------------------
+# The web app: `dragon serve`
+# ------------------------------------------------------------------------------
+[server]
+host = "127.0.0.1"             # 0.0.0.0 to open it on your LAN (put a reverse proxy in front)
+port = 8787
+auth = true                    # access token in the link; keep it on
+token = ""                     # empty → generated once, kept in <data_dir>/server_token
+approval_timeout = 3600        # seconds an approval card waits before it counts as "deny"
+cors_origins = []              # only for the Vite dev server of the web app, e.g. ["http://localhost:5173"]
+max_upload_mb = 25             # largest file the app may attach to a message

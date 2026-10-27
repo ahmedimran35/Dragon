@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Dragon">
+  <!-- The Dragon mark, simplified for favicons and PWA icons: head, crest, eye. -->
+  <path d="M22 20 L8 13 L18 26 Z" fill="#D9A441"/>
+  <path d="M17 27 L6 26 L15 34 Z" fill="#D9A441"/>
+  <path d="M56 32 L40 17 L24 21 L15 33 L25 45 L43 41 Z" fill="#C2410C"/>
+  <circle cx="39" cy="27" r="3.4" fill="#1F1A17"/>
+</svg>

@@ -1,0 +1,44 @@
+name: Feature request
+description: Something Dragon should do, or should do differently.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Say what problem the change solves and what you would expect to see; a request that
+        names a real task you tried to do is the kind most likely to land. If another product
+        does it the way you want, a link to where that is described helps.
+        Remember the scope: a self-hosted, web-only, single-user agent — no cloud service,
+        no accounts, no mobile or desktop apps.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: "The task or situation, in a sentence or two. Not the solution yet."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to happen
+      description: "How it should look in the web app, the CLI or the config. Examples help."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Web app
+        - Agent behaviour and prompts
+        - Sentinel, approvals, vault
+        - Tools and connections (browser, hands, email, MCP, ...)
+        - Goals, memory, triggers
+        - Models and providers
+        - Channels
+        - Docs
+        - Other

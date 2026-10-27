@@ -1,0 +1,34 @@
+# Dragon in a container. The agent sees two mounts: /data (memory, goals, vault,
+# audit log, sessions) and /workspace (its files).
+#
+#   cp .env.example .env && $EDITOR .env    # model key, DRAGON_SERVER_TOKEN, ...
+#   docker compose up -d                    # web app on http://127.0.0.1:8787
+#   docker compose logs -f                  # the first line prints the #token=... URL once
+#   docker compose run --rm dragon dragon chat            # terminal chat
+#   docker compose run --rm dragon dragon run "plan my week"  # one task
+
+services:
+  dragon:
+    build: .
+    image: dragon
+    env_file:
+      # `required: false` keeps `docker compose up` working before .env exists
+      - path: .env
+        required: false
+    volumes:
+      - dragon-data:/data
+      - ./workspace:/workspace
+    ports:
+      # bound to localhost only; put a reverse proxy with HTTPS in front of it
+      # (docs/self-hosting.md). To reach it on your LAN instead, publish the port:
+      #   ports: ["8787:8787"]
+      - "127.0.0.1:8787:8787"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  # all of Dragon's state; back this volume up (docs/self-hosting.md)
+  dragon-data:

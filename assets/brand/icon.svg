@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Dragon">
+  <!-- The Dragon app mark: a geometric dragon head in the Ember & Ash palette.
+       Ember-orange head, muted gold crest, warm charcoal ground. Flat, no text. -->
+  <rect width="64" height="64" rx="14" fill="#1F1A17"/>
+  <!-- crest / wing motif, swept back -->
+  <path d="M22 20 L8 13 L18 26 Z" fill="#D9A441"/>
+  <path d="M17 27 L6 26 L15 34 Z" fill="#D9A441"/>
+  <!-- head -->
+  <path d="M56 32 L40 17 L24 21 L15 33 L25 45 L43 41 Z" fill="#FB923C"/>
+  <!-- scale -->
+  <path d="M28 35 L33 39 L28 43" fill="none" stroke="#C2410C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- mouth -->
+  <path d="M52 34 L44 37" fill="none" stroke="#1F1A17" stroke-width="2" stroke-linecap="round"/>
+  <!-- eye -->
+  <circle cx="39" cy="27" r="3.4" fill="#141110"/>
+</svg>

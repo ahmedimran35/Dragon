@@ -1,0 +1,19 @@
+# Shell scripts run from a checkout on Windows too (Git Bash, WSL); a CRLF checkout breaks
+# them, so they keep LF whatever core.autocrlf says.
+*.sh text eol=lf
+
+# The web app is built on Windows too (`cd web && npm run build` writes the production build
+# into dragon/server/static), and Vite carries the source's line endings into what it writes:
+# with a CRLF checkout, a build that changed nothing still rewrites files. The sources keep
+# LF, so every platform produces the same bundle byte for byte. Binary media is named so
+# text detection can never touch it.
+web/** text=auto eol=lf
+dragon/server/static/** text=auto eol=lf
+web/**/*.png binary
+web/**/*.webp binary
+web/**/*.mp4 binary
+web/**/*.woff2 binary
+web/**/*.ico binary
+web/**/*.svg text eol=lf
+assets/**/*.png binary
+assets/**/*.mp4 binary

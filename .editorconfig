@@ -1,0 +1,28 @@
+# Editor defaults that match what the tree already uses; nothing here reformats a file,
+# it only tells an editor what to do with the lines you touch. Ruff (Python) and two-space
+# TypeScript, YAML, TOML and Markdown are the ones in use. https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Python: Ruff, line length 100 (pyproject.toml)
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+# Markdown: two trailing spaces are a line break
+[*.md]
+trim_trailing_whitespace = false
+
+# TOML and shell are two-space in config/ and scripts/
+[*.{toml,sh}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab

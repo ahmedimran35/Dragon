@@ -1,0 +1,44 @@
+# Component labels for pull requests, from the files a pull request touches
+# (actions/labeler). The kind label (bug, enhancement, documentation, ci, release,
+# maintenance) comes from the title; see .github/workflows/labels.yml and
+# CONTRIBUTING.md.
+
+web:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "web/**"
+          - "dragon/server/static/**"
+
+runtime:
+  - changed-files:
+      - any-glob-to-any-file:
+          # dragon/ without dragon/server/static/, the committed web build (that is `web`,
+          # above): the four globs together cover every other file under dragon/
+          - "dragon/*"
+          - "dragon/!(server)/**"
+          - "dragon/server/*"
+          - "dragon/server/!(static)/**"
+          - "tests/**"
+          - "scripts/**"
+          - "pyproject.toml"
+
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "config/**"
+          - ".env.example"
+          - "docker-compose.yml"
+          - "Dockerfile"
+          - ".dockerignore"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "*.md"
+          - "assets/**"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"

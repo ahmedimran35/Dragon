@@ -1,0 +1,35 @@
+# What never enters the build context (the Dockerfile copies pyproject.toml, README.md,
+# LICENSE, NOTICE, dragon/, config/config.example.toml and web/). A pattern without `**/`
+# matches at the root only (Go's filepath.Match, not gitignore).
+.git
+.github
+.venv
+.env
+.env.*
+*.env
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/*.egg-info
+**/node_modules
+**/*.tsbuildinfo
+workspace/
+config/config.toml
+config/*.local.toml
+tests/
+docs/
+assets/
+scripts/
+dist/
+build/
+# web sources are needed (stage 1 builds them); their scratch trees are not
+web/dist/
+web/.vite/
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+THIRD_PARTY_NOTICES.md
+AGENTS.md

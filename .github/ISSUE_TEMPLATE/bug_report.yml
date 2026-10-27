@@ -1,0 +1,58 @@
+name: Bug report
+description: The runtime, the web app or the CLI does not work as the docs say.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. A bug report we can reproduce is usually fixed within days.
+        **Security issues** (a way past the Sentinel, a leaked secret, an SSRF) go through
+        GitHub's private reporting, see [SECURITY.md](../blob/main/SECURITY.md), not here.
+        Do not paste API keys or private conversations.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: "What you did, what you expected, what happened instead. Paste the exact error if there is one."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. dragon serve
+        2. In the web app, ask "…"
+        3. Approve the shell call
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`dragon --version`, and how you run it (pip, Docker image tag, from source)"
+      placeholder: "dragon 0.1.0 · docker"
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "Output of dragon doctor"
+      description: "Redact anything private first (hostnames, keys, paths with your name)."
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Docker Compose
+        - Docker run
+        - pip (from source)
+        - pip (from a package index)
+        - Other
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: "Logs, screenshots of the web app, your model provider (DeepSeek, OpenAI, Ollama, ...). No keys."
