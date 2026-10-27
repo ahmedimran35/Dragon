@@ -148,7 +148,7 @@ export function DragonRoundButton({
   );
 }
 
-/** Dragon's big left-aligned page title ("Goals", "Ideas"). */
+/** Dragon's big left-aligned page title ("Goals", "Tasks"). */
 export function DragonPageTitle({ children, className }: { children: ReactNode; className?: string }) {
   return <h1 className={cx("px-5 pt-1.5 pb-1.5 text-[26px] font-bold leading-8 tracking-tight", className)}>{children}</h1>;
 }

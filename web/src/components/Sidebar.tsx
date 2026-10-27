@@ -1,4 +1,4 @@
-import { Bug, LayoutGrid, Lightbulb, Menu, MessageCircle, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, Wrench, X } from "lucide-react";
+import { Bug, LayoutGrid, ListChecks, Menu, MessageCircle, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, Wrench, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { useDeveloperTools } from "../devtools";
 import { useT } from "../i18n";
@@ -52,7 +52,7 @@ export function Sidebar() {
   const rail: Array<{ id: Tab; label: string; icon: ReactNode; badge?: number }> = [
     { id: "chat", label: "Chat", icon: <MessageCircle size={21} />, badge: pendingApprovals },
     { id: "feed", label: "Feed", icon: <Newspaper size={21} />, badge: feedUnseen },
-    { id: "ideas", label: "Ideas", icon: <Lightbulb size={21} /> },
+    { id: "tasks", label: "Tasks", icon: <ListChecks size={21} />, badge: pendingApprovals + proposals },
     { id: "goals", label: "Goals", icon: <SquareCheckBig size={21} />, badge: proposals },
     { id: "library", label: "Library", icon: <LayoutGrid size={21} /> },
     ...(developer ? [{ id: "coding" as Tab, label: "Coding", icon: <TerminalSquare size={21} /> }] : []),

@@ -20,7 +20,7 @@ from dragon.llm import MockLLM
 from dragon.schema import Function, LLMResponse, Message, ToolCall
 from dragon.server import create_app
 from dragon.server.events import Timeline
-from dragon.server.service import DragonService, _parse_ideas
+from dragon.server.service import DragonService, _parse_suggestions
 from dragon.server.webui import current_thread
 
 
@@ -1998,10 +1998,38 @@ def test_what_the_user_types_during_a_background_pass_is_theirs(server):
         service.ui.end_run("main")
 
 
-def test_ideas_fallback_and_parsing(server):
-    client, _, llm = server
-    data = client.get("/api/ideas").json()
-    assert data["source"] == "starter" and len(data["ideas"]) >= 3
+def test_tasks_migrate_an_ideas_cache(server):
+    client, svc, _ = server
+    (svc.data_dir / "ideas.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-01-01T00:00:00+00:00",
+                "source": "model",
+                "ideas": [
+                    {
+                        "title": "Plan my week",
+                        "detail": "A realistic plan.",
+                        "prompt": "Help me plan my week",
+                        "area": "planning",
+                        "kind": "chat",
+                    }
+                ],
+            }
+        ),
+        "utf-8",
+    )
+    view = client.get("/api/tasks").json()
+    assert view["source"] == "model"
+    assert [t["title"] for t in view["suggested"]] == ["Plan my week"]
+    assert not (svc.data_dir / "ideas.json").exists(), "the cache is retired once it is migrated"
+
+
+def test_tasks_suggestions_and_actions(server):
+    client, svc, llm = server
+    view = client.get("/api/tasks").json()
+    assert view["suggested"] == [] and view["source"] == "none"
+    # nothing is known yet: a refresh asks nothing and suggests nothing (no canned list)
+    assert client.get("/api/tasks?refresh=1").json()["suggested"] == []
     llm.script.append(
         LLMResponse(
             content='Here you go: [{"title": "Book the dentist", "detail": "You mentioned it.", "prompt": "Find a dentist near me"}]'
@@ -2010,12 +2038,12 @@ def test_ideas_fallback_and_parsing(server):
     client.post(
         "/api/memory", json={"content": "Needs a dentist appointment", "category": "general"}
     )
-    data = client.get("/api/ideas?refresh=1").json()
-    assert data["source"] == "model" and data["ideas"][0]["title"] == "Book the dentist"
-    assert _parse_ideas("no json here") == []
-    assert _parse_ideas('<think>x</think>[{"title":"a","prompt":"b"}]')[0]["title"] == "a"
-    # what tapping an idea does, the phone's three kinds; unknown or missing → chat
-    kinds = _parse_ideas(
+    view = client.get("/api/tasks?refresh=1").json()
+    assert view["source"] == "model" and view["suggested"][0]["title"] == "Book the dentist"
+    assert _parse_suggestions("no json here") == []
+    assert _parse_suggestions('<think>x</think>[{"title":"a","prompt":"b"}]')[0]["title"] == "a"
+    # what starting a task does, the phone's three kinds; unknown or missing → chat
+    kinds = _parse_suggestions(
         '[{"title":"a","prompt":"b","kind":"routine","time":"7:30"},'
         '{"title":"c","prompt":"d","kind":"routine","time":"18:45"},'
         '{"title":"e","prompt":"f","kind":"goal","category":"Finance"},'
@@ -2029,13 +2057,40 @@ def test_ideas_fallback_and_parsing(server):
         ("goal", None, "other"),
         ("chat", None, None),
     ]
-    assert {i["kind"] for i in data["ideas"]} <= {"chat", "routine", "goal"}
+    assert {i["kind"] for i in view["suggested"]} <= {"chat", "routine", "goal"}
     # what models actually send: a code fence, a real newline inside a string, a trailing
     # comma, and a reply cut off at max_tokens — the items that parse are kept
     fenced = '```json\n[{"title":"a","detail":"line\none","prompt":"b"},]\n```'
-    assert [i["title"] for i in _parse_ideas(fenced)] == ["a"]
+    assert [i["title"] for i in _parse_suggestions(fenced)] == ["a"]
     cut = '[{"title":"a","prompt":"b"}, {"title":"c","prompt":"d"}, {"title":"e","pro'
-    assert [i["title"] for i in _parse_ideas(cut)] == ["a", "c"]
+    assert [i["title"] for i in _parse_suggestions(cut)] == ["a", "c"]
+
+    # Start marks it working and logs it; the run's end brings it back ready for a look
+    task = view["suggested"][0]
+    got = client.post(f"/api/tasks/{task['id']}/start", json={"thread": "main"}).json()
+    assert got["status"] == "working" and got["attempts"][-1]["action"] == "start"
+    client.post("/api/threads/main/send", json={"text": "Find a dentist near me"})
+    wait_idle(svc)
+    view = client.get("/api/tasks").json()
+    assert [t["id"] for t in view["review"]] == [task["id"]]
+    assert view["review"][0]["attempts"][-1]["outcome"] == "finished"
+    # Resolve folds it away with its note; Reopen brings it back as a suggestion
+    client.post(f"/api/tasks/{task['id']}/resolve", json={"note": "booked"})
+    view = client.get("/api/tasks").json()
+    assert [t["id"] for t in view["resolved"]] == [task["id"]]
+    assert view["resolved"][0]["attempts"][-1]["note"] == "booked"
+    client.post(f"/api/tasks/{task['id']}/reopen")
+    assert [t["id"] for t in client.get("/api/tasks").json()["suggested"]] == [task["id"]]
+    # Hide takes a suggestion away for good: the same one does not come back on a refresh
+    client.post(f"/api/tasks/{task['id']}/hide")
+    assert client.get("/api/tasks").json()["suggested"] == []
+    llm.script.append(
+        LLMResponse(content='[{"title": "Book the dentist", "prompt": "Find a dentist near me"}]')
+    )
+    assert client.get("/api/tasks?refresh=1").json()["suggested"] == []
+    # the buttons have their states: a hidden task does not start, an unknown id is a 404
+    assert client.post(f"/api/tasks/{task['id']}/start").status_code == 400
+    assert client.post("/api/tasks/no-such-task/start").status_code == 404
 
 
 def test_timeline_survives_restart(server, settings: Settings):

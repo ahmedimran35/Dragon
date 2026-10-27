@@ -371,7 +371,7 @@ def serve(
     ] = False,
     auto: AutoOpt = False,
 ) -> None:
-    """Run the always-on Dragon with the web app (chat, goals, ideas, memory, approvals)."""
+    """Run the always-on Dragon with the web app (chat, goals, tasks, memory, approvals)."""
     settings = _settings(config, auto=auto)
     if no_auth:
         settings.server.auth = False

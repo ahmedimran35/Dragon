@@ -7,7 +7,7 @@ const zhCN: Record<string, string> = {
   // ── Shell, tabs, connection ───────────────────────────────────────────────────────
   Chat: "聊天",
   Feed: "动态",
-  Ideas: "点子",
+  Tasks: "任务",
   Goals: "目标",
   Library: "资源库",
   "Main chat": "主要聊天",
@@ -212,8 +212,31 @@ const zhCN: Record<string, string> = {
   Message: "发消息",
   "An emoji instead": "改用表情符号",
 
-  // ── Ideas ─────────────────────────────────────────────────────────────────────────
-  "Refresh ideas": "刷新灵感",
+  // ── Tasks ─────────────────────────────────────────────────────────────────────────
+  "Refresh tasks": "刷新任务",
+  "Needs you": "需要你处理",
+  Suggested: "建议",
+  "Ready for review": "待查看",
+  Resolved: "已完成",
+  Hide: "隐藏",
+  Resolve: "标记完成",
+  Reopen: "重新打开",
+  History: "记录",
+  "Nothing needs you right now.": "现在没有需要你处理的事。",
+  "No suggestions yet. Refresh once {name} knows you better.": "还没有建议。等 {name} 更了解你之后再刷新。",
+  "Could not refresh tasks: {error}": "无法刷新任务：{error}",
+  "Routine set: every day at {time}": "例程已设好：每天 {time}",
+  "Needs your approval": "等待你的批准",
+  "Waiting for your answer": "等待你的回答",
+  "Plan change waiting for your decision": "计划变更等待你的决定",
+  "Past its due date": "已超过截止日期",
+  started: "已开始",
+  "tried again": "已重试",
+  hidden: "已隐藏",
+  resolved: "已解决",
+  reopened: "已重新打开",
+  finished: "已结束",
+  // the areas feed posts fall into
   Planning: "规划",
   Research: "调研",
   Money: "财务",
@@ -224,9 +247,7 @@ const zhCN: Record<string, string> = {
   // the goals page's folded list and the model pickers share this one (the Models contract's wording)
   "Show {n} more": "还有 {n} 个",
   Cancelled: "已取消",
-  "Starter ideas. Refresh once {name} knows you better.": "入门灵感。等 {name} 更了解你之后再刷新。",
   "Generated {when}": "生成于 {when}",
-  "Could not refresh ideas: {error}": "无法刷新灵感：{error}",
   "Do it for me": "帮我做",
 
   // ── Goals ─────────────────────────────────────────────────────────────────────────
@@ -1216,7 +1237,7 @@ const zhCN: Record<string, string> = {
   evening: "晚上",
   "{weekday} {part}": "{weekday}{part}",
 
-  // Ideas
+  // Tasks
   "Starts a conversation": "会开始一段对话",
   "Send to chat": "发到聊天",
 
@@ -1232,8 +1253,6 @@ const zhCN: Record<string, string> = {
   "Mark as done": "标记为已完成",
   "Mark as not done": "标记为未完成",
 
-  // the runtime's starter ideas (dragon/server/service.py STARTER_IDEAS)
-                              
   // Library
   Artifacts: "构件",
   Media: "影音内容",

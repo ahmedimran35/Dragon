@@ -520,19 +520,43 @@ export interface TidyReport {
   lines: string[];
 }
 
-export interface Idea {
+/** A task on the Tasks tab: a suggestion of the agent's and what became of it, or a live
+ *  item that needs the user. */
+export interface Task {
+  id: string;
   title: string;
   detail: string;
+  /** what Start sends to the chat (suggestions); "" on a live row. */
   prompt: string;
   /** planning | goals | research | money | health | home | learning | people | files | fun */
   area?: string;
-  /** what tapping it does: chat (a message in the main chat, the default) · routine (a daily
-   *  repeating reminder with the prompt) · goal (a goal conversation in the chat) */
-  kind?: "chat" | "routine" | "goal" | string;
+  /** what Start does: chat (a message in the main chat, the default) · routine (a daily
+   *  repeating reminder with the prompt) · goal (a goal conversation in the chat); on live
+   *  rows: run (a coding run) · approval · question · proposal · overdue */
+  kind?: "chat" | "routine" | "goal" | "run" | "approval" | "question" | "proposal" | "overdue" | string;
   /** routines: the time of day, "HH:MM" */
   time?: string;
   /** goals: the category key (health, finance, … other) */
   category?: string;
+  status: "suggested" | "working" | "review" | "resolved" | "needs_you" | string;
+  /** a started task's run went to this thread */
+  thread?: string;
+  created_at: string;
+  updated_at: string;
+  /** the log: every button pressed on this task and what came of it. */
+  attempts: TaskAttempt[];
+  /** live rows only: where the item is handled. */
+  link?: { tab?: string; thread?: string };
+}
+
+/** One line in a task's log. */
+export interface TaskAttempt {
+  at: string;
+  action: "start" | "retry" | "hide" | "resolve" | "reopen" | "run" | string;
+  /** a fixed word the screens translate: started, tried again, hidden, resolved, reopened, finished. */
+  outcome: string;
+  /** what the button did in the user's words, when they said. */
+  note?: string;
 }
 
 export interface FeedPost {
@@ -556,10 +580,16 @@ export interface FeedPostsData {
   error?: string;
 }
 
-export interface IdeasData {
+export interface TasksData {
   generated_at: string | null;
   source: string;
-  ideas: Idea[];
+  /** live items waiting on the user: an approval or a question, a goal's plan change, an overdue goal. */
+  needs_you: Task[];
+  /** started tasks whose run is on a thread, and coding runs still going. */
+  working: Task[];
+  suggested: Task[];
+  review: Task[];
+  resolved: Task[];
   error?: string;
 }
 
@@ -1115,7 +1145,7 @@ export type WsMessage =
   | { kind: "triggers" }
   | { kind: "calendar"; calendar: CalendarData }
   | { kind: "feed_posts" }
-  | { kind: "ideas"; ideas: IdeasData }
+  | { kind: "tasks" }
   | { kind: "profile"; profile: Profile }
   | { kind: "settings"; settings: SettingsView }
   | { kind: "hands_state"; hands: HandsStatus }

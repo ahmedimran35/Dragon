@@ -11,7 +11,8 @@
     POST /api/goals/{id}/proposal/accept  DELETE /api/goals/{id}/proposal   the agent's plan change
     GET  /api/memory  POST /api/memory  DELETE /api/memory/{id}
     POST /api/memory/tidy (?dry_run=1)   GET /api/memory/changes   POST /api/memory/changes/{id}/restore
-    GET  /api/ideas (?refresh=1)
+    GET  /api/tasks (?refresh=1)         what needs you, what it suggests, what it is working on
+    POST /api/tasks/{id}/start|hide|resolve|retry|reopen  what the tab's buttons do
     GET  /api/activity                   audit tail + approvals granted
     GET  /api/feed                        what happened without you asking
     GET  /api/feed/posts                  posts written for you, and your feed instructions
@@ -110,6 +111,14 @@ class SendBody(BaseModel):
 
 class ThreadBody(BaseModel):
     title: str = ""
+
+
+class TaskActionBody(BaseModel):
+    """A button on the Tasks tab: the thread a started task's run goes to, and what the
+    button did in the user's words (kept in the task's log)."""
+
+    thread: str = Field("main", max_length=128)
+    note: str = Field("", max_length=200)
 
 
 class FeedbackBody(BaseModel):
@@ -880,18 +889,30 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
         svc.bus.publish({"kind": "memory"})
         return change.to_dict()
 
-    # ------------------------------------------------------------------ ideas
-    @app.get("/api/ideas", dependencies=dep)
-    async def ideas(refresh: bool = False) -> dict[str, Any]:
+    # ------------------------------------------------------------------ tasks
+    @app.get("/api/tasks", dependencies=dep)
+    async def tasks(refresh: bool = False) -> dict[str, Any]:
         if refresh:
             try:
-                return await svc.refresh_ideas()
+                return await svc.refresh_tasks()
             except Exception as exc:  # noqa: BLE001
-                logger.warning("ideas refresh failed: {}", exc)
-                data = svc.cached_ideas()
+                logger.warning("tasks refresh failed: {}", exc)
+                data = svc.tasks_view()
                 data["error"] = f"{type(exc).__name__}: {exc}"
                 return data
-        return svc.cached_ideas()
+        return svc.tasks_view()
+
+    @app.post("/api/tasks/{task_id}/{action}", dependencies=dep)
+    async def task_action(
+        task_id: str, action: str, body: TaskActionBody | None = None
+    ) -> dict[str, Any]:
+        body = body or TaskActionBody()
+        try:
+            return svc.task_action(task_id, action, body.thread, body.note)
+        except KeyError:
+            raise HTTPException(404, "no such task") from None
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
 
     # ------------------------------------------------------------------ activity / settings
     @app.get("/api/activity", dependencies=dep)

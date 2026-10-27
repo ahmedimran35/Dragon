@@ -7,7 +7,7 @@ import { useMenuKeys } from "./useMenuKeys";
 import { DragonSheet } from "../screens/DragonSheet";
 
 /**
- * The big-face header on the Feed, Ideas, Goals and Library tabs: the
+ * The big-face header on the Feed, Tasks, Goals and Library tabs: the
  * face and the name tag with what the agent is doing, Dragon's round hamburger (the chats
  * drawer) at the left, "•••" at the right — a menu of the page's own actions, then System
  * files and Settings — and the big left-aligned page title under

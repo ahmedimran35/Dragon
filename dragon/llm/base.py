@@ -77,7 +77,7 @@ class BaseLLM(ABC):
 
         A reasoning model can spend the whole ``max_tokens`` thinking and hand back an
         empty or half-written answer with ``finish_reason == "length"``. The callers
-        that want a JSON list (ideas, memory tidy-up) cannot use a fragment, so the
+        that want a JSON list (suggestions, memory tidy-up) cannot use a fragment, so the
         second try gets ``roomier_max_tokens()``.
         """
         response = await self.ask(messages, **kwargs)

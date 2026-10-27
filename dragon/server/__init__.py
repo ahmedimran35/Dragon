@@ -4,7 +4,7 @@
     dragon serve --host 0.0.0.0      # reachable from your other devices on the same network
 
 Everything the CLI can do, the app can do — plus background work while the app
-is closed, approval cards, side chats, goals, ideas, memory you can edit, and an
+is closed, approval cards, side chats, goals, tasks, memory you can edit, and an
 activity log behind the avatar.
 """
 

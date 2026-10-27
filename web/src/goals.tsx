@@ -4,7 +4,7 @@ import { getLocale, intlLocale, t } from "./i18n";
 import type { GoalCategory } from "./types";
 
 /**
- * What the goals screen, the status sheet and the ideas list share: Dragon's life areas, the
+ * What the goals screen, the status sheet and the tasks list share: Dragon's life areas, the
  * cadence spec ("weekly mon 09:00") and its words, the due-date line. Pure, so the goals screen
  * stays a lazy chunk of its own and these have tests.
  */

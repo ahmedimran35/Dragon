@@ -1,4 +1,4 @@
-"""The always-on Dragon: threads, background workers, goals scheduler, ideas, profile.
+"""The always-on Dragon: threads, background workers, goals scheduler, tasks, profile.
 
 This is the piece that keeps working after you close the app. It owns one
 :class:`~dragon.app.DragonApp` (LLM, tools, Sentinel, vault, memory, goals)
@@ -61,17 +61,17 @@ from dragon.tools.reminder_tools import Reminders
 from dragon.tools.trigger_tools import Triggers
 from dragon.triggers import MailWatcher, Trigger, matches
 
-IDEAS_PROMPT = """You are {name}, the user's personal agent. Based on what you know about them, propose {n} concrete, genuinely useful things you could do for them right now. Prefer tasks you can actually complete with your tools (research, comparisons, planning, drafting, tracking, reminders, organising files, advancing their goals).
+SUGGESTIONS_PROMPT = """You are {name}, the user's personal agent. Based on what you know about them, propose {n} concrete, genuinely useful things you could do for them right now. Prefer tasks you can actually complete with your tools (research, comparisons, planning, drafting, tracking, reminders, organising files, advancing their goals). Each one becomes a task the user can start and see through, so keep it to something finishable in one sitting.
 
 What you know:
 {context}
 
 Answer with a JSON array only, no prose. Each item: {{"title": "<short title, max 8 words>", "detail": "<one sentence on what you would do and why it helps>", "prompt": "<the exact request the user could send you to start>", "area": "<one of: planning, research, goals, money, health, home, learning, people, files, fun>", "kind": "<chat for a one-off conversation; routine for something to do every day at a time; goal for something long-term to track>", "time": "<HH:MM, routines only>", "category": "<goals only; one of: health, finance, career, learning, relationships, family, home, travel, creative, other>"}}. Mostly chat; at most one routine and one goal. Write in the user's language ({language})."""
 
-# what tapping an idea does on every client: a message in the main chat, a daily routine
+# what starting a task does on every client: a message in the main chat, a daily routine
 # (a repeating reminder with the prompt), or a goal conversation
-IDEA_KINDS = ("chat", "routine", "goal")
-IDEA_GOAL_CATEGORIES = (
+TASK_KINDS = ("chat", "routine", "goal")
+TASK_GOAL_CATEGORIES = (
     "health",
     "finance",
     "career",
@@ -84,7 +84,7 @@ IDEA_GOAL_CATEGORIES = (
     "other",
 )
 
-IDEA_AREAS = (
+AREAS = (
     "planning",
     "research",
     "goals",
@@ -118,54 +118,6 @@ def _feed_time(value: Any) -> str:
     """``"8:00"`` → ``"08:00"``; anything that is not ``HH:MM`` → ``""``."""
     m = _FEED_TIME.match(str(value or "").strip())
     return f"{int(m.group(1)):02d}:{m.group(2)}" if m else ""
-
-
-STARTER_IDEAS = [
-    {
-        "title": "Plan my week",
-        "detail": "Tell me what's on your plate and I'll turn it into a realistic plan with the important things first.",
-        "prompt": "Help me plan my week. Ask me what I need to get done, then propose a schedule.",
-        "area": "planning",
-        "kind": "chat",
-    },
-    {
-        "title": "A morning brief",
-        "detail": "Before you leave each morning: the weather, the first thing on your plate and anything new worth knowing.",
-        "prompt": "Morning brief: check today's weather, read my calendar and reminders for today, and tell me in five lines what matters.",
-        "area": "planning",
-        "kind": "routine",
-        "time": "07:30",
-    },
-    {
-        "title": "Research & compare options",
-        "detail": "Laptops, flights, insurance, a new phone plan: I'll gather the facts and compare them for you.",
-        "prompt": "I need to make a purchase decision. Ask me what I'm choosing between, then research and compare the options.",
-        "area": "research",
-        "kind": "chat",
-    },
-    {
-        "title": "Set up a long-term goal",
-        "detail": "Share a goal (learn a language, run a 10k, save for a trip) and I'll break it into steps and keep track.",
-        "prompt": "I want to set up a long-term goal. Ask me about it, then create a plan with concrete steps and track it.",
-        "area": "goals",
-        "kind": "goal",
-        "category": "other",
-    },
-    {
-        "title": "Tell me about yourself",
-        "detail": "The more I know about your preferences, routines and constraints, the more useful I get. I'll remember what matters.",
-        "prompt": "Ask me a few questions about myself so you can help me better, and remember the answers.",
-        "area": "people",
-        "kind": "chat",
-    },
-    {
-        "title": "Build a quick tracker",
-        "detail": "Spending, habits, workouts, reading: I can write a small script or document to track it for you.",
-        "prompt": "Build me a simple tracker. Ask me what I want to track and how, then create it in the workspace.",
-        "area": "files",
-        "kind": "chat",
-    },
-]
 
 
 PROACTIVITY = ("off", "low", "default", "high")
@@ -322,7 +274,7 @@ class Thread:
     worker: asyncio.Task[None] | None = None
     stopping: bool = False
     busy: bool = False
-    # background prompts (goal work, ideas) → the short label shown as the approval purpose
+    # background prompts (goal work, tasks) → the short label shown as the approval purpose
     purposes: dict[str, str] = field(default_factory=dict)
 
     def meta(self) -> dict[str, Any]:
@@ -1147,6 +1099,7 @@ class DragonService:
             self._push_background(event)
         if not purpose:
             self._firstrun_turn_ended(thread.id, final)
+        self._task_run_finished(thread.id)
 
     # ------------------------------------------------------------------ approvals
     def decide(
@@ -2006,20 +1959,160 @@ class DragonService:
             self.threads[MAIN_THREAD].updated_at = now_iso()
         return report.to_dict()
 
-    # ------------------------------------------------------------------ ideas
-    def _ideas_file(self) -> Path:
-        return self.data_dir / "ideas.json"
+    # ------------------------------------------------------------------ tasks
+    def _tasks_file(self) -> Path:
+        return self.data_dir / "tasks.json"
 
-    def cached_ideas(self) -> dict[str, Any]:
-        path = self._ideas_file()
+    def _save_tasks(self, state: dict[str, Any]) -> None:
+        self._tasks_file().write_text(json.dumps(state, ensure_ascii=False), "utf-8")
+
+    def _tasks_state(self) -> dict[str, Any]:
+        """The tasks the tab keeps: the model's suggestions and what became of them
+        (``suggested → working → review → resolved``, or hidden). An ideas cache from an
+        older runtime becomes the first suggestions, once; the old file goes away."""
+        path = self._tasks_file()
         if path.exists():
             try:
-                return json.loads(path.read_text("utf-8"))
+                data = json.loads(path.read_text("utf-8"))
+                if isinstance(data, dict) and isinstance(data.get("tasks"), list):
+                    return data
             except (OSError, json.JSONDecodeError):
                 pass
-        return {"generated_at": None, "source": "starter", "ideas": STARTER_IDEAS}
+        state: dict[str, Any] = {"generated_at": None, "source": "none", "tasks": []}
+        old = self.data_dir / "ideas.json"
+        if old.exists():
+            try:
+                cached = json.loads(old.read_text("utf-8"))
+            except (OSError, json.JSONDecodeError):
+                cached = {}
+            items = cached.get("ideas", []) if isinstance(cached, dict) else []
+            for item in items:
+                if task := _task_from_item(item):
+                    state["tasks"].append(task)
+            if state["tasks"]:
+                state["generated_at"] = cached.get("generated_at")
+                state["source"] = "model"
+            old.unlink(missing_ok=True)
+        return state
 
-    async def refresh_ideas(self, n: int = 5) -> dict[str, Any]:
+    def tasks_view(self) -> dict[str, Any]:
+        """Everything the Tasks tab shows: the live items that need the user, what is being
+        worked on (started tasks and running coding jobs), the suggestions, what is ready
+        for a look, and what was resolved. Hidden tasks stay on disk so a refresh does not
+        bring them back."""
+        state = self._tasks_state()
+        tasks = [t for t in state["tasks"] if t.get("status") != "hidden"]
+
+        def with_status(status: str) -> list[dict[str, Any]]:
+            return [dict(t) for t in tasks if t.get("status") == status]
+
+        return {
+            "generated_at": state.get("generated_at"),
+            "source": state.get("source", "none"),
+            "needs_you": self._needs_you(),
+            "working": with_status("working") + self._live_runs(),
+            "suggested": with_status("suggested"),
+            "review": with_status("review"),
+            "resolved": with_status("resolved"),
+        }
+
+    def _needs_you(self) -> list[dict[str, Any]]:
+        """Live items waiting on the user: an approval or a question in a chat, a goal's
+        proposed plan change, a goal past its due date. They are handled where they live —
+        the row opens that screen — so nothing here holds state of its own."""
+        now = now_iso()
+        out: list[dict[str, Any]] = []
+
+        def row(item_id: str, title: str, detail: str, kind: str, link: dict[str, str]) -> None:
+            out.append(
+                {
+                    "id": item_id,
+                    "title": title[:80],
+                    "detail": detail[:300],
+                    "prompt": "",
+                    "kind": kind,
+                    "status": "needs_you",
+                    "thread": link.get("thread", ""),
+                    "created_at": now,
+                    "updated_at": now,
+                    "attempts": [],
+                    "link": link,
+                }
+            )
+
+        for thread in self.visible_threads():
+            for ev in thread.timeline.events:
+                etype = ev.get("type")
+                if ev.get("status") != "pending" or etype not in ("approval", "question"):
+                    continue
+                eid = str(ev.get("id", ""))
+                if etype == "approval":
+                    tool = str(ev.get("tool", "")).strip()
+                    title = str(ev.get("reason") or ev.get("purpose") or tool).strip()
+                    row(
+                        f"live:approval:{thread.id}:{eid}",
+                        title,
+                        tool,
+                        "approval",
+                        {"tab": "chat", "thread": thread.id},
+                    )
+                else:
+                    row(
+                        f"live:question:{thread.id}:{eid}",
+                        str(ev.get("text", "")).strip(),
+                        "",
+                        "question",
+                        {"tab": "chat", "thread": thread.id},
+                    )
+        for goal in self.app.goals.list("active"):
+            if goal.proposal is not None:
+                row(
+                    f"live:proposal:{goal.id}",
+                    goal.title,
+                    goal.proposal.reason,
+                    "proposal",
+                    {"tab": "goals"},
+                )
+        for goal in self.app.goals.list("active"):
+            if goal.overdue and goal.next_step is not None:
+                row(
+                    f"live:overdue:{goal.id}",
+                    goal.title,
+                    goal.next_step.title,
+                    "overdue",
+                    {"tab": "goals"},
+                )
+        return out[:20]
+
+    def _live_runs(self) -> list[dict[str, Any]]:
+        """Coding-agent runs still going, as rows under Working."""
+        try:
+            runs = self.coding.list_runs(20)
+        except Exception:  # noqa: BLE001 - the coding service is an optional feature
+            return []
+        now = now_iso()
+        return [
+            {
+                "id": f"live:run:{run.get('id', '')}",
+                "title": str(run.get("text", "")).strip()[:80],
+                "detail": str(run.get("agent", "")),
+                "prompt": "",
+                "kind": "run",
+                "status": "working",
+                "thread": "",
+                "created_at": now,
+                "updated_at": now,
+                "attempts": [],
+                "link": {"tab": "coding"},
+            }
+            for run in runs
+            if run.get("status") == "running"
+        ]
+
+    async def refresh_tasks(self, n: int = 5) -> dict[str, Any]:
+        """Ask the model for suggestions from what it knows. What is started, hidden or
+        resolved stays as it is; a suggestion the model repeats keeps its place."""
+        state = self._tasks_state()
         context_lines: list[str] = []
         if self.app.memory is not None:
             for m in self.app.memory.all(limit=30):
@@ -2041,11 +2134,10 @@ class DragonService:
         if self.settings.agent.user_profile.strip():
             context_lines.insert(0, f"- profile: {self.settings.agent.user_profile.strip()[:500]}")
         if not context_lines:
-            data = {"generated_at": now_iso(), "source": "starter", "ideas": STARTER_IDEAS}
-            self._ideas_file().write_text(json.dumps(data, ensure_ascii=False), "utf-8")
-            return data
+            # nothing to go on yet; the tab says so rather than shipping canned suggestions
+            return self.tasks_view()
         language = self.settings.agent.language
-        prompt = IDEAS_PROMPT.format(
+        prompt = SUGGESTIONS_PROMPT.format(
             name=self.profile.name,
             n=n,
             context="\n".join(context_lines),
@@ -2055,15 +2147,93 @@ class DragonService:
         )
         with llm_session.run("feed"):
             response = await self.app.llm.ask_complete([Message.user(prompt)], tools=None)
-        ideas = _parse_ideas(response.content or "")
-        data = {
-            "generated_at": now_iso(),
-            "source": "model" if ideas else "starter",
-            "ideas": ideas or STARTER_IDEAS,
+        seen = {
+            str(t.get("title", "")).strip().lower()
+            for t in state["tasks"]
+            if t.get("status") != "suggested"
         }
-        self._ideas_file().write_text(json.dumps(data, ensure_ascii=False), "utf-8")
-        self.bus.publish({"kind": "ideas", "ideas": data})
-        return data
+        batch: list[dict[str, Any]] = []
+        for task in _parse_suggestions(response.content or ""):
+            key = task["title"].strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            batch.append(task)
+        settled = [t for t in state["tasks"] if t.get("status") != "suggested"]
+        kept = [
+            t
+            for t in state["tasks"]
+            if t.get("status") == "suggested" and t["title"].strip().lower() not in seen
+        ]
+        # suggestions are cheap to ask for again, so the section stays a short list
+        state["tasks"] = settled + (kept + batch)[-12:]
+        state["generated_at"] = now_iso()
+        state["source"] = "model" if (kept or batch) else state.get("source", "none")
+        self._save_tasks(state)
+        self.bus.publish({"kind": "tasks"})
+        return self.tasks_view()
+
+    def task_action(
+        self, task_id: str, action: str, thread: str = "main", note: str = ""
+    ) -> dict[str, Any]:
+        """What the tab's buttons do to a task. Every one leaves a line in its log."""
+        state = self._tasks_state()
+        task = next((t for t in state["tasks"] if t.get("id") == task_id), None)
+        if task is None:
+            raise KeyError(task_id)
+        allowed = {
+            "start": ("suggested",),
+            "retry": ("working", "review"),
+            "hide": ("suggested",),
+            "resolve": ("suggested", "working", "review"),
+            "reopen": ("resolved",),
+        }
+        outcome = {
+            "start": "started",
+            "retry": "tried again",
+            "hide": "hidden",
+            "resolve": "resolved",
+            "reopen": "reopened",
+        }
+        status = str(task.get("status", ""))
+        if action not in allowed or status not in allowed[action]:
+            raise ValueError(f"{action} does not apply to a {status} task")
+        now = now_iso()
+        if action in ("start", "retry"):
+            task["status"], task["thread"] = "working", thread
+        elif action == "hide":
+            task["status"] = "hidden"
+        elif action == "resolve":
+            task["status"] = "resolved"
+        else:  # reopen
+            task["status"], task["thread"] = "suggested", ""
+        task["updated_at"] = now
+        task.setdefault("attempts", []).append(
+            {"at": now, "action": action, "outcome": outcome[action], "note": note.strip()[:200]}
+        )
+        self._save_tasks(state)
+        self.bus.publish({"kind": "tasks"})
+        return dict(task)
+
+    def _task_run_finished(self, thread_id: str) -> None:
+        """The run a started task sent to a thread ended: the task comes back ready for a
+        look, with the run in its log."""
+        if not self._tasks_file().exists():
+            return
+        state = self._tasks_state()
+        now = now_iso()
+        changed = False
+        for task in state["tasks"]:
+            if task.get("status") == "working" and task.get("thread") == thread_id:
+                task["status"] = "review"
+                task["updated_at"] = now
+                task.setdefault("attempts", []).append(
+                    {"at": now, "action": "run", "outcome": "finished", "note": ""}
+                )
+                changed = True
+        if changed:
+            self._save_tasks(state)
+            self.bus.publish({"kind": "tasks"})
 
     # ------------------------------------------------------------------ feed posts
     def _feed_file(self) -> Path:
@@ -2618,7 +2788,7 @@ def goal_to_dict(g: Goal) -> dict[str, Any]:
     }
 
 
-def _idea_objects(text: str) -> list[Any]:
+def _json_objects(text: str) -> list[Any]:
     """The JSON objects in a model reply that should have been a JSON array.
 
     Usually it is one: ``[{...}, {...}]``, possibly inside a code fence. When the
@@ -2650,36 +2820,50 @@ def _idea_objects(text: str) -> list[Any]:
     return found
 
 
-def _parse_ideas(text: str) -> list[dict[str, str]]:
-    ideas: list[dict[str, str]] = []
-    for item in _idea_objects(text):
-        if not isinstance(item, dict):
-            continue
-        title = str(item.get("title", "")).strip()
-        prompt = str(item.get("prompt", "")).strip()
-        if title and prompt:
-            area = str(item.get("area", "")).strip().lower()
-            kind = str(item.get("kind", "")).strip().lower()
-            idea = {
-                "title": title[:80],
-                "detail": str(item.get("detail", "")).strip()[:300],
-                "prompt": prompt[:1000],
-                "area": area if area in IDEA_AREAS else "fun",
-                "kind": kind if kind in IDEA_KINDS else "chat",
-            }
-            if idea["kind"] == "routine":
-                when = str(item.get("time", "")).strip()
-                idea["time"] = when if re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", when) else "09:00"
-            elif idea["kind"] == "goal":
-                category = str(item.get("category", "")).strip().lower()
-                idea["category"] = category if category in IDEA_GOAL_CATEGORIES else "other"
-            ideas.append(idea)
-    return ideas[:8]
+def _task_from_item(item: Any) -> dict[str, Any] | None:
+    """One model-written suggestion as a task: ``suggested``, with its id and empty log."""
+    if not isinstance(item, dict):
+        return None
+    title = str(item.get("title", "")).strip()
+    prompt = str(item.get("prompt", "")).strip()
+    if not (title and prompt):
+        return None
+    area = str(item.get("area", "")).strip().lower()
+    kind = str(item.get("kind", "")).strip().lower()
+    now = now_iso()
+    task: dict[str, Any] = {
+        "id": new_id("task"),
+        "title": title[:80],
+        "detail": str(item.get("detail", "")).strip()[:300],
+        "prompt": prompt[:1000],
+        "area": area if area in AREAS else "fun",
+        "kind": kind if kind in TASK_KINDS else "chat",
+        "status": "suggested",
+        "thread": "",
+        "created_at": now,
+        "updated_at": now,
+        "attempts": [],
+    }
+    if task["kind"] == "routine":
+        when = str(item.get("time", "")).strip()
+        task["time"] = when if re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", when) else "09:00"
+    elif task["kind"] == "goal":
+        category = str(item.get("category", "")).strip().lower()
+        task["category"] = category if category in TASK_GOAL_CATEGORIES else "other"
+    return task
+
+
+def _parse_suggestions(text: str) -> list[dict[str, Any]]:
+    suggestions: list[dict[str, Any]] = []
+    for item in _json_objects(text):
+        if task := _task_from_item(item):
+            suggestions.append(task)
+    return suggestions[:8]
 
 
 def _parse_posts(text: str) -> list[dict[str, str]]:
     posts: list[dict[str, str]] = []
-    for item in _idea_objects(text):
+    for item in _json_objects(text):
         if not isinstance(item, dict):
             continue
         title = str(item.get("title", "")).strip()
@@ -2690,7 +2874,7 @@ def _parse_posts(text: str) -> list[dict[str, str]]:
                 {
                     "title": title[:120],
                     "body": body[:2000],
-                    "area": area if area in IDEA_AREAS else "fun",
+                    "area": area if area in AREAS else "fun",
                     "prompt": str(item.get("prompt", "")).strip()[:1000],
                 }
             )

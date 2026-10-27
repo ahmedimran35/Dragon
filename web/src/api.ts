@@ -17,7 +17,6 @@ import type {
   Goal,
   HandsStatus,
   HoldEvent,
-  IdeasData,
   MediaSlotData,
   MemoryChange,
   MemoryItem,
@@ -32,6 +31,8 @@ import type {
   StateSnapshot,
   StudioSession,
   StudioView,
+  Task,
+  TasksData,
   TestResult,
   ThreadMeta,
   TidyReport,
@@ -239,7 +240,9 @@ export const api = {
   memoryChanges: (limit = 30) => request<MemoryChange[]>(`/api/memory/changes?limit=${limit}`),
   restoreMemoryChange: (id: string) =>
     request<MemoryChange>(`/api/memory/changes/${id}/restore`, { method: "POST" }),
-  ideas: (refresh = false) => request<IdeasData>(`/api/ideas${refresh ? "?refresh=1" : ""}`),
+  tasks: (refresh = false) => request<TasksData>(`/api/tasks${refresh ? "?refresh=1" : ""}`),
+  taskAction: (id: string, action: "start" | "hide" | "resolve" | "retry" | "reopen", body: { thread?: string; note?: string } = {}) =>
+    request<Task>(`/api/tasks/${id}/${action}`, { method: "POST", body: JSON.stringify(body) }),
   activity: (n = 150) => request<ActivityData>(`/api/activity?n=${n}`),
   feed: (limit = 60) => request<FeedItem[]>(`/api/feed?limit=${limit}`),
   feedPosts: () => request<FeedPostsData>("/api/feed/posts"),

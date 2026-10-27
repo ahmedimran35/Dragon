@@ -1019,7 +1019,7 @@ function requestBrief(events: TimelineEvent[]): string {
 
 /**
  * The turn that just ended was the person's: walking back from the end, a reply with words,
- * then the bubble that started it — `user` (typed, dictated, an idea tapped) counts; a
+ * then the bubble that started it — `user` (typed, dictated, a task started) counts; a
  * background notice (a routine, the feed, a goal check-in) does not.
  */
 export function personStartedTurn(events: TimelineEvent[]): boolean {

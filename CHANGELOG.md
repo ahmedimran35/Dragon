@@ -5,6 +5,14 @@ All notable changes to Dragon are recorded here. The format follows
 
 ## [Unreleased]
 
+- The Ideas tab is now the **Tasks** tab. It holds what needs you right now (an approval,
+  a question, a goal's proposed plan change, a goal past its date), what Ember suggests
+  from what it knows, what it is working on, what is ready for a look, and what was
+  resolved. A started task keeps a log of what was done to it — started, run finished,
+  tried again, resolved — and the run's end brings it back ready for a look.
+- Suggestions come from the model alone: the starter catalogue is gone, `GET /api/tasks`
+  and `POST /api/tasks/{id}/start|hide|resolve|retry|reopen` replace `GET /api/ideas`,
+  and an existing `ideas.json` becomes the first suggestions in `tasks.json`.
 - The `desktop` hands backend is gone with the desktop app: `settings.hands.backend` now
   accepts `auto`, `pyautogui` or `xdotool`, and an existing `desktop` value degrades to
   `auto` (pyautogui when installed, else xdotool on X11).

@@ -5,7 +5,7 @@ Downloads); this is the same file for the web client, and for anyone whose runti
 another machine: the reply is the zip itself, so nothing is written to the runtime's disk.
 
 What goes in is what the runtime keeps about the person and its own work: the profile and
-the look, the rooms (feed, ideas, memory, goals, reminders, triggers), the address book,
+the look, the rooms (feed, tasks, memory, goals, reminders, triggers), the address book,
 the approvals it was given, and the chats as it holds them (`threads/`, `sessions/`).
 
 What never goes in is a credential or a key: `vault.enc` and `vault.key` (the secrets
@@ -31,7 +31,7 @@ MAX_FILE_BYTES = 64 * 1024 * 1024
 FILES = (
     "profile.json",
     "feed_posts.json",
-    "ideas.json",
+    "tasks.json",
     "memory.db",
     "goals.db",
     "reminders.db",
@@ -51,7 +51,7 @@ README = """Your Dragon data, exported {when}
 
 profile.json        the agent's name and look
 feed_posts.json     the Feed as it was written
-ideas.json          the ideas kept for a new chat
+tasks.json          the tasks the tab keeps: suggestions and what became of them
 memory.db           what the agent remembers
 goals.db            goals and their steps
 reminders.db        reminders and routines

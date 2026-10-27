@@ -1,4 +1,4 @@
-import { LayoutGrid, Lightbulb, Loader2, MessageCircle, Newspaper, SquareCheckBig, WifiOff } from "lucide-react";
+import { LayoutGrid, ListChecks, Loader2, MessageCircle, Newspaper, SquareCheckBig, WifiOff } from "lucide-react";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { setToken } from "./api";
 import { BrandMark } from "./components/BrandMark";
@@ -17,7 +17,7 @@ const ChannelsScreen = lazy(() => import("./screens/ChannelsScreen").then((m) =>
 const CodingScreen = lazy(() => import("./screens/CodingScreen").then((m) => ({ default: m.CodingScreen })));
 const ConnectionsScreen = lazy(() => import("./screens/ConnectionsScreen").then((m) => ({ default: m.ConnectionsScreen })));
 const GoalsScreen = lazy(() => import("./screens/GoalsScreen").then((m) => ({ default: m.GoalsScreen })));
-const IdeasScreen = lazy(() => import("./screens/IdeasScreen").then((m) => ({ default: m.IdeasScreen })));
+const TasksScreen = lazy(() => import("./screens/TasksScreen").then((m) => ({ default: m.TasksScreen })));
 const LibraryScreen = lazy(() => import("./screens/LibraryScreen").then((m) => ({ default: m.LibraryScreen })));
 const MemoryScreen = lazy(() => import("./screens/MemoryScreen").then((m) => ({ default: m.MemoryScreen })));
 const Onboarding = lazy(() => import("./screens/Onboarding").then((m) => ({ default: m.Onboarding })));
@@ -37,7 +37,7 @@ const glyph = (active: boolean) => ({ size: 26, strokeWidth: active ? 2 : 1.7, f
 const TABS: Array<{ id: Tab; label: string; icon: (active: boolean) => ReactNode }> = [
   { id: "chat", label: "Chat", icon: (a) => <MessageCircle {...glyph(a)} /> },
   { id: "feed", label: "Feed", icon: (a) => <Newspaper {...glyph(a)} /> },
-  { id: "ideas", label: "Ideas", icon: (a) => <Lightbulb {...glyph(a)} /> },
+  { id: "tasks", label: "Tasks", icon: (a) => <ListChecks {...glyph(a)} /> },
   { id: "goals", label: "Goals", icon: (a) => <SquareCheckBig {...glyph(a)} /> },
   { id: "library", label: "Library", icon: (a) => <LayoutGrid {...glyph(a)} /> },
 ];
@@ -52,12 +52,13 @@ export default function App() {
     document.title = name && name.toLowerCase() !== "dragon" ? `${name} · Dragon` : "Dragon";
   }, [state.profile?.name]);
 
-  // `#connections` etc. opens a section straight away.
+  // `#connections` etc. opens a section straight away (`#ideas` is Tasks' old name).
   useEffect(() => {
     const jump = () => {
-      const tab = window.location.hash.slice(1) as Tab;
-      if (tab && TABS.some((x) => x.id === tab)) setTab(tab);
-      else if (tab === "memory" || tab === "connections" || tab === "channels" || tab === "skills" || tab === "coding" || tab === "avatar") setTab(tab);
+      const raw = window.location.hash.slice(1);
+      const wanted = (raw === "ideas" ? "tasks" : raw) as Tab;
+      if (wanted && TABS.some((x) => x.id === wanted)) setTab(wanted);
+      else if (wanted === "memory" || wanted === "connections" || wanted === "channels" || wanted === "skills" || wanted === "coding" || wanted === "avatar") setTab(wanted);
     };
     jump();
     window.addEventListener("hashchange", jump);
@@ -106,7 +107,7 @@ export default function App() {
           <Suspense fallback={<Loading />}>
             {state.tab === "chat" && <ChatScreen />}
             {state.tab === "feed" && <FeedScreen />}
-            {state.tab === "ideas" && <IdeasScreen />}
+            {state.tab === "tasks" && <TasksScreen />}
             {state.tab === "goals" && <GoalsScreen />}
             {state.tab === "library" && <LibraryScreen />}
             {state.tab === "memory" && <MemoryScreen />}
@@ -123,7 +124,7 @@ export default function App() {
           <ul className="pointer-events-auto flex w-full max-w-[420px] items-center gap-0.5 rounded-full bg-surface-2/55 px-3.5 py-1.5 ring-1 ring-border/50 backdrop-blur-2xl">
             {TABS.map((tab) => {
               const active = state.tab === tab.id;
-              const badge = tab.id === "chat" ? pendingApprovals : tab.id === "feed" ? feedUnseen : tab.id === "goals" ? proposals : 0;
+              const badge = tab.id === "chat" ? pendingApprovals : tab.id === "feed" ? feedUnseen : tab.id === "goals" ? proposals : tab.id === "tasks" ? pendingApprovals + proposals : 0;
               return (
                 <li key={tab.id} className="min-w-0 flex-1">
                   <button

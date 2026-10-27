@@ -33,8 +33,8 @@ import type {
   WsMessage,
 } from "./types";
 
-/** Tab bar: chat · feed · ideas · goals · library. Memory, connections and settings live behind the avatar. */
-export type Tab = "chat" | "feed" | "ideas" | "goals" | "library" | "memory" | "connections" | "channels" | "skills" | "you" | "coding" | "avatar";
+/** Tab bar: chat · feed · tasks · goals · library. Memory, connections and settings live behind the avatar. */
+export type Tab = "chat" | "feed" | "tasks" | "goals" | "library" | "memory" | "connections" | "channels" | "skills" | "you" | "coding" | "avatar";
 /**
  * The page this app is framed in (the showcase's frame), when it can be named: the
  * ancestor's origin where the browser exposes it, else the referrer's. A message to the parent
@@ -59,7 +59,7 @@ function tellParent(message: { type: string; [k: string]: unknown }): void {
   if (origin) window.parent.postMessage(message, origin);
 }
 
-const TAB_NAMES: Tab[] = ["chat", "feed", "ideas", "goals", "library", "memory", "connections", "channels", "skills", "you", "coding", "avatar"];
+const TAB_NAMES: Tab[] = ["chat", "feed", "tasks", "goals", "library", "memory", "connections", "channels", "skills", "you", "coding", "avatar"];
 
 /** A coding run being followed live: the run itself and the steps that arrived so far. */
 export interface CodingLive {
@@ -105,6 +105,7 @@ export interface AppState {
   pendingApprovals: ApprovalEvent[];
   /** Bumps whenever something lands in the Feed (background work, cards, artifacts). */
   feedVersion: number;
+  tasksVersion: number;
   /** ISO time of the newest Feed item you have looked at. */
   feedSeenAt: string;
   /** Path of the workspace file open in the viewer, if any. */
@@ -214,6 +215,7 @@ const initial: AppState = {
   calendarVersion: 0,
   pendingApprovals: [],
   feedVersion: 0,
+  tasksVersion: 0,
   feedSeenAt: readStorage(FEED_SEEN_KEY) ?? "",
   viewer: null,
   draft: null,
@@ -471,6 +473,8 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
       return { ...state, calendarVersion: state.calendarVersion + 1 };
     case "feed_posts":
       return { ...state, feedVersion: state.feedVersion + 1 };
+    case "tasks":
+      return { ...state, tasksVersion: state.tasksVersion + 1 };
     case "profile":
       return {
         ...state,
@@ -646,14 +650,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // The service worker (push + app badge) and where a notification tap should land.
   useEffect(() => {
     void registerWorker();
-    // `?thread=<id>` opens a chat, `?tab=goals` (feed, ideas, library, connections) a tab —
+    // `?thread=<id>` opens a chat, `?tab=goals` (feed, tasks, library, connections) a tab —
+    // `?tab=ideas` is the Tasks tab's old name, kept so old links still land somewhere.
     // used by notification taps and by links into the app.
     // `?draft=<text>&attach=<json>` puts text and already-uploaded files into the composer
     // without sending — how "Share to Dragon" from another app arrives.
     const openFromUrl = (href: string) => {
       const url = new URL(href, window.location.origin);
       const thread = url.searchParams.get("thread");
-      const tab = url.searchParams.get("tab");
+      const wanted = url.searchParams.get("tab");
+      const tab = wanted === "ideas" ? "tasks" : wanted;
       if (thread) dispatch({ type: "activeThread", thread });
       if (tab && TAB_NAMES.includes(tab as Tab) && !thread) dispatch({ type: "tab", tab: tab as Tab });
       else dispatch({ type: "tab", tab: "chat" });
