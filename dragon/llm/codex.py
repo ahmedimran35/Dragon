@@ -2,7 +2,7 @@
 
 Two users: :class:`CodexLLM`, the in-process backend behind ``provider = "chatgpt"``, and the
 loopback proxy (``dragon chatgpt proxy``, ``dragon/llm/chatgpt_proxy.py``) that lets any
-OpenAI-compatible client — the desktop app — use the sign-in. Both go through the same two
+OpenAI-compatible client use the sign-in. Both go through the same two
 functions: :func:`to_codex` turns a Chat Completions request body into a Codex Responses body;
 :class:`StreamState` turns the Responses SSE events back into Chat Completions chunks. The
 rules are spelled out in the runtime team's ``CONTRACT-chatgpt.md``.

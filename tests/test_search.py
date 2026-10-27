@@ -22,7 +22,7 @@ from dragon.tools import WebSearch
 from dragon.vault import CredentialVault
 
 DDG_ROWS = [
-    {"title": "Dragon", "href": "https://github.com/dragon/Dragon", "body": "An agent."},
+    {"title": "Dragon", "href": "https://example.com/project", "body": "An agent."},
     {"title": "Dragon", "href": "https://example.com/dragon", "body": "Something else."},
 ]
 
@@ -252,12 +252,12 @@ def _parallel_reply(rows: list[dict[str, Any]], structured: bool = True) -> dict
 
 PARALLEL_ROWS = [
     {
-        "url": "https://github.com/dragon/Dragon",
+        "url": "https://example.com/project",
         "title": "Dragon",
         "publish_date": None,
         "excerpts": ["# Dragon\n\nAn open-source  personal agent.", "On every device."],
     },
-    {"url": "https://dragon.cn/docs/", "title": "Docs", "excerpts": []},
+    {"url": "https://example.com/docs/", "title": "Docs", "excerpts": []},
     {"url": "https://example.com/three", "title": "Three", "excerpts": ["third"]},
 ]
 
@@ -274,10 +274,10 @@ async def test_parallel_without_a_key(wire: Wire, ddg):
     assert [(r.title, r.url, r.snippet) for r in results] == [
         (
             "Dragon",
-            "https://github.com/dragon/Dragon",
+            "https://example.com/project",
             "# Dragon An open-source personal agent. On every device.",
         ),
-        ("Docs", "https://dragon.cn/docs/", ""),
+        ("Docs", "https://example.com/docs/", ""),
     ]
     req = wire.requests[0]
     assert req.method == "POST" and req.url == "https://search.parallel.ai/mcp"
@@ -326,7 +326,7 @@ async def test_parallel_reads_an_event_stream(monkeypatch: pytest.MonkeyPatch):
     )
     p = WebSearchProvider(SearchSettings(provider="parallel", fallback=False))
     results, _ = await p.search("dragon", 2, "")
-    assert [r.url for r in results] == ["https://github.com/dragon/Dragon"]
+    assert [r.url for r in results] == ["https://example.com/project"]
 
 
 async def test_parallel_errors_are_said(wire: Wire, ddg):
@@ -430,12 +430,12 @@ def test_parallel_is_saved_and_others_kept(settings: Settings):
 KEENABLE_ROWS = [
     {
         "title": "Dragon",
-        "url": "https://github.com/dragon/Dragon",
+        "url": "https://example.com/project",
         "description": "",
         "snippet": "Dragon\n\nAn open-source  personal agent.\nOn every device.",
         "acquired_at": "2026-10-20T08:00:00Z",
     },
-    {"title": "Docs", "url": "https://dragon.cn/docs/", "description": "", "snippet": "d" * 600},
+    {"title": "Docs", "url": "https://example.com/docs/", "description": "", "snippet": "d" * 600},
     {"title": "Three", "url": "https://example.com/three", "description": "", "snippet": "third"},
 ]
 
@@ -452,10 +452,10 @@ async def test_keenable_without_a_key(wire: Wire, ddg):
     assert [(r.title, r.url, r.snippet) for r in results] == [
         (
             "Dragon",
-            "https://github.com/dragon/Dragon",
+            "https://example.com/project",
             "Dragon An open-source personal agent. On every device.",
         ),
-        ("Docs", "https://dragon.cn/docs/", "d" * 400),
+        ("Docs", "https://example.com/docs/", "d" * 400),
     ]
     req = wire.requests[0]
     assert req.method == "POST" and req.url == "https://api.keenable.ai/v1/search/public"

@@ -500,15 +500,7 @@ export function SettingsScreen() {
               <div className="break-all">
                 {t("Runtime:")} {window.location.origin} · <span className="text-fg/70">{t("the token is in the server_token file in the data folder")}</span>
               </div>
-              <div>
-                <a href="https://github.com/dragon/Dragon/blob/main/docs/cli.md" target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">
-                  {t("The command line and the API")}
-                </a>
-                {" · "}
-                <a href="https://github.com/dragon/Dragon/blob/main/docs/harness.md" target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">
-                  {t("Dragon on DeepSeek Harness")}
-                </a>
-              </div>
+              <div>{t("The command line and the API")} · {t("see docs/cli.md in the repository")}</div>
             </div>
           )}
         </Section>

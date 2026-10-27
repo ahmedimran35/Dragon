@@ -1,30 +1,25 @@
 """Window mode on macOS, run on Linux against a fake adapter: choosing a window, mapping the
 model's coordinates to the screen, the event sequences of a click, a drag, a scroll, typed
 text and key combinations, the link's fall-back to the screen, the per-app permission and
-the pointer in the hands' events — and, under the desktop app, the windows and their
-pictures coming through the app's helper (the operator's ``/windows`` and ``/window``)."""
+the pointer in the hands' events."""
 
 from __future__ import annotations
 
 import base64
 import struct
 import zlib
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
 from dragon.computer import mac_window as mw
-from dragon.computer import operator as op
 from dragon.computer.link import ComputerLink
 from dragon.config import GUISettings, HandsSettings, Settings
-from dragon.gui.errors import DeviceError
 from dragon.sentinel import AuditLog, Sentinel
 from dragon.tools.computer import ComputerAct, ComputerScreen
 from dragon.ui import ApprovalDecision, ApprovalRequest
 from tests.gui_fakes import AutoApproveUI, png
 from tests.test_computer import SCREEN_RAW, FakeHands
-from tests.test_computer_operator import TOKEN, FakeOperator
 
 
 @pytest.fixture()
@@ -386,132 +381,12 @@ async def test_open_app_sets_the_target_and_computer_target_reports(
     assert not plain.in_window_mode()
 
 
-# ------------------------------------------------------------------ through the helper
-HELPER_WINDOWS: list[dict[str, Any]] = [
-    {"id": 41, "pid": 500, "app": "Safari", "bundle_id": "com.apple.Safari", "title": "Apple",
-     "bounds": [100, 50, 800, 600], "layer": 0, "on_screen": True},
-    {"id": 43, "pid": 600, "app": "Notes", "bundle_id": "com.apple.Notes", "title": "Shopping",
-     "bounds": [0, 0, 500, 400], "layer": 0, "on_screen": True},
-    {"id": 1, "pid": 10, "app": "Window Server", "bundle_id": "", "title": "Menubar",
-     "bounds": [0, 0, 1440, 24], "layer": 24, "on_screen": True},
-]  # fmt: skip
-HELPER_SCREEN_TEXT = (
-    "macOS: switch on Dragon Computer Use under System Settings → Privacy & Security → "
-    "Screen Recording. The helper restarts by itself; the app does not need to."
-)
-
-
-@pytest.fixture()
-def mac_operator(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeOperator]:
-    """The desktop app's operator on a Mac with its helper bundle: /info says so, and the
-    helper's windows are served through /windows and /window."""
-    fake = FakeOperator(
-        width=1440,
-        height=900,
-        helper={"present": True, "running": True, "pid": 4242, "capture": "ScreenCaptureKit"},
-        windows=HELPER_WINDOWS,
-    )
-    monkeypatch.setenv(op.URL_ENV, fake.url)
-    monkeypatch.setenv(op.TOKEN_ENV, TOKEN)
-    monkeypatch.setattr(op, "_platform", lambda: "darwin")
-    monkeypatch.setattr("dragon.computer.link.active_window", lambda: ("", ""))
-    yield fake
-    fake.close()
-
-
-def test_the_operator_window_adapter_lists_and_captures_through_the_helper(
-    mac_operator: FakeOperator,
-) -> None:
-    """Under the app the runtime never captures a window itself: the list and the picture
-    are the helper's (ScreenCaptureKit on macOS 14+), the events still go out from here."""
-    events = FakeMac()
-    adapter = mw.OperatorWindowAdapter(op.OperatorClient(mac_operator.url, TOKEN), events)
-    hands = mw.MacWindowHands(adapter, sleep=lambda _s: None)
-    windows = adapter.windows()
-    assert [w.id for w in windows] == [41, 43, 1]
-    assert windows[0].owner == "Safari" and windows[0].bundle_id == "com.apple.Safari"
-    assert (windows[0].x, windows[0].y, windows[0].width, windows[0].height) == (100, 50, 800, 600)
-    assert windows[2].layer == 24  # the menu bar: listed, never chosen
-    png_data, frame = hands.look("Safari")
-    assert frame.window.id == 41 and (frame.image_width, frame.image_height) == (1600, 1200)
-    assert mw.png_size(png_data) == (1600, 1200)
-    assert mac_operator.window_shots[-1] == {"id": 41, "max_pixels": 2_000_000, "format": "png"}
-    assert mac_operator.shots == []  # no whole-screen picture was taken for this
-    # a click maps through the frame and is posted to Safari's process by this runtime
-    hands.click(800, 600)
-    assert events.events == [
-        ("mouse", 500, "move", 500, 350, "left", 1),
-        ("mouse", 500, "down", 500, 350, "left", 1),
-        ("mouse", 500, "up", 500, 350, "left", 1),
-    ]
-    # the helper's Screen Recording row is off: the operator's 403, in its words, retried
-    # on the next look (WindowUnavailable, not a broken layer)
-    mac_operator.refuse_window = (403, f"window 41 could not be captured: {HELPER_SCREEN_TEXT}")
-    with pytest.raises(mw.WindowUnavailable, match="Dragon Computer Use") as exc:
-        hands.look("Safari")
-    assert not isinstance(exc.value, mw.WindowLayerBroken)
-    mac_operator.refuse_window = None
-    # the window went away between the list and the capture: unavailable, not broken
-    mac_operator.refuse_window = (404, "window 41 could not be captured: no window with id 41")
-    with pytest.raises(mw.WindowUnavailable, match="no window with id 41") as exc:
-        hands.look("Safari")
-    assert not isinstance(exc.value, mw.WindowLayerBroken)
-    # the helper itself is gone (503): the layer failed — `auto` mode parks on the screen
-    mac_operator.refuse_window = (
-        503,
-        "window 41 could not be captured: Dragon Computer Use did not start (no port after 10 s)",
-    )
-    with pytest.raises(mw.WindowLayerBroken, match="did not start"):
-        hands.look("Safari")
-
-
-async def test_the_link_works_in_a_window_through_the_helper_under_the_app(
-    settings: Settings, mac_operator: FakeOperator, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    pytest.importorskip("PIL")
-    events = FakeMac()
-    # pyobjc is not here; the events adapter the link would make is the fake, and window
-    # mode counts as available (a Mac with pyobjc)
-    monkeypatch.setattr(mw, "QuartzAdapter", lambda: events)
-    monkeypatch.setattr(mw, "available", lambda: (True, ""))
-    link = ComputerLink(
-        HandsSettings(enabled=True, settle_s=0.0, max_image_width=400),  # type: ignore[arg-type]
-        shots_dir=settings.agent.workspace / "screenshots",
-    )
-    assert link.backend_available() and link._backend is not None
-    assert link._backend.name == "desktop"
-    # the whole screen first: the operator's picture (1440×900 points, under max_image_width)
-    screen = await link.screen()
-    assert (screen.width, screen.height) == (392, 252)
-    assert (link.device.width, link.device.height) == (1440, 900)
-    assert len(mac_operator.shots) == 1
-    # then Safari's window: listed and captured through the helper, scaled for the model
-    link.set_target("Safari")
-    assert link.in_window_mode()
-    screen = await link.screen()
-    assert screen.app == "com.apple.Safari" and screen.app_name == "Safari"
-    assert (screen.width, screen.height) == (400, 300) and "window of Safari" in screen.note
-    assert mac_operator.window_shots[-1]["id"] == 41
-    assert len(mac_operator.shots) == 1  # no second whole-screen picture
-    assert isinstance(link._window.adapter, mw.OperatorWindowAdapter)  # type: ignore[union-attr]
-    # the click: posted to Safari's process by the runtime, not sent to the operator's /execute
-    await link.act({"action": "click", "x": 200, "y": 150, "label": "Go"})
-    assert ("mouse", 500, "down", 500, 350, "left", 1) in events.events
-    assert mac_operator.executed == []
-    # the helper's grant goes away: the window look says so and the screen is tried instead,
-    # which the operator refuses with the same words — the tool's error names the helper
-    mac_operator.refuse_window = (403, f"window 41 could not be captured: {HELPER_SCREEN_TEXT}")
-    mac_operator.refuse_shot = (403, f"no screenshot: {HELPER_SCREEN_TEXT}")
-    with pytest.raises(DeviceError, match="Dragon Computer Use"):
-        await link.screen()
-    assert link.in_window_mode()  # not parked: a grant is retried, a broken layer is not
-
-
-def test_without_the_helper_the_runtime_keeps_its_own_window_path(
+# ------------------------------------------------------------------ the quartz path
+def test_the_window_hands_go_through_the_runtime_own_quartz_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A Mac under an app without the helper bundle (or no app at all): the Quartz adapter
-    is what the link makes — the CGWindowListCreateImage path, announced in the log."""
+    """The link's window hands are the runtime's own Quartz adapter — the
+    CGWindowListCreateImage path, announced in the log."""
     made: list[str] = []
 
     class Quartz(FakeMac):
@@ -520,22 +395,11 @@ def test_without_the_helper_the_runtime_keeps_its_own_window_path(
             made.append("quartz")
 
     monkeypatch.setattr(mw, "QuartzAdapter", Quartz)
-    monkeypatch.setattr(op, "_platform", lambda: "darwin")
-    # an app whose /info has a helper object without a bundle (`present: false`)
-    fake = FakeOperator(helper={"present": False, "running": False, "reason": "no helper bundle"})
-    try:
-        monkeypatch.setenv(op.URL_ENV, fake.url)
-        monkeypatch.setenv(op.TOKEN_ENV, TOKEN)
-        link = ComputerLink(HandsSettings(enabled=True, settle_s=0.0))
-        hands = link._window_hands()
-        assert made == ["quartz"] and isinstance(hands.adapter, Quartz)
-        # and no app at all (the CLI): the same path
-        monkeypatch.delenv(op.URL_ENV)
-        plain = ComputerLink(HandsSettings(enabled=True, settle_s=0.0), backend=FakeHands())
-        assert isinstance(plain._window_hands().adapter, Quartz)
-        assert made == ["quartz", "quartz"]
-    finally:
-        fake.close()
+    link = ComputerLink(HandsSettings(enabled=True, settle_s=0.0))
+    hands = link._window_hands()
+    assert made == ["quartz"] and isinstance(hands.adapter, Quartz)
+    # the same hands on the next look, not a second adapter
+    assert link._window_hands() is hands and made == ["quartz"]
 
 
 # ------------------------------------------------------------------ per-app permission

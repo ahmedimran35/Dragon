@@ -47,7 +47,7 @@ import { describeCadence } from "../goals";
 type Pane = 0 | 1 | 2 | 3;
 
 /**
- * Tap the face: Dragon's agent page, the way the Android app draws it — the face with its pen
+ * Tap the face: Dragon's agent page — the face with its pen
  * badge, the name, "online" (or what it is doing), and four panes under a glyph switch: what
  * it did (the activity log), the approvals it holds (what is waiting for you, then the standing
  * permissions), its daily work (background passes, reminders, routines, triggers), and its

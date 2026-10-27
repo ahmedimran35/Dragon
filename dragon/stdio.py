@@ -2,19 +2,17 @@
 
 A Chinese Windows console is code page 936, and the check mark a report is made of is not in
 GBK: ``dragon doctor > report.txt`` died with ``UnicodeEncodeError: 'gbk' codec can't
-encode character '\\u2713'`` before printing a line, and the desktop shell reads the same
-output through a pipe, which takes the locale's encoding. The three bridge programs print
-what a phone or a page answered, Chinese among it, into the shell tool, which read it as
-UTF-8: on that console the model was handed replacement characters. The frozen runtime the
-desktop app carries does not read ``PYTHONUTF8`` or ``PYTHONUNBUFFERED`` either.
+encode character '\\u2713'`` before printing a line, and a shell reading the same output
+through a pipe takes the locale's encoding. Programs that print Chinese into the shell tool
+were read as UTF-8, so on that console the model was handed replacement characters. A
+frozen runtime does not read ``PYTHONUTF8`` or ``PYTHONUNBUFFERED`` either.
 
 The other direction has the same cause: a program started on that console answers in 936, so
 ``cmd /c chcp`` reached the model as a row of replacement characters and a ``dir`` of a Chinese
 folder was unreadable. :func:`decode_output` reads a child's bytes as UTF-8 when they are
 UTF-8, and in the console's code page when they are not.
 
-The standard library only: ``dragon-device`` and its two neighbours import this and must
-stay cheap on a phone.
+The standard library only: the modules that import this must stay cheap.
 """
 
 from __future__ import annotations
@@ -39,7 +37,7 @@ def console_encoding() -> str:
 
     Asked of the console itself, because the locale is not always the answer: a console can
     be switched to another code page with ``chcp`` while the locale stays where it was. With
-    no console at all (the desktop app's frozen runtime, a service) there is nothing to ask,
+    no console at all (a frozen runtime, a service) there is nothing to ask,
     and the locale's encoding is the closest thing to it.
     """
     codepage = _console_code_page()

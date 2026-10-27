@@ -25,7 +25,7 @@ NAMED = 'Juno it is.\n\n- one\n- two\n- three\n\n```dragon-naming\n{"agent_name"
 
 # ----------------------------------------------------------------------------- the fence
 def test_naming_block_parsing():
-    """The desktop's and the iPhone's samples: quotes stripped, duplicates dropped, three at most."""
+    """Sample name blocks: quotes stripped, duplicates dropped, three at most."""
     text = (
         "What should I call you?\n```dragon-naming\n"
         '{"user_address": "“Li”", "suggest": ["Pip", "Pip", "\'Wren\'", "Sol", "Fig"]}\n```'
@@ -137,10 +137,9 @@ def test_pick_and_dismiss():
     assert firstrun.running(asking) and not firstrun.running(firstrun.dismiss_chooser(asking))
 
 
-def test_pool_pick_is_stable_distinct_and_the_desktops():
+def test_pool_pick_is_stable_and_distinct():
     a = firstrun.built_in_suggestions("session-1", "en")
     assert a == firstrun.built_in_suggestions("session-1", "en") and len(a) == 2 and a[0] != a[1]
-    # the same numbers as `builtInSuggestions` in harness/dsh-dragon/src/firstrun.ts
     assert a == ["Remy", "Juno"]
     assert firstrun.built_in_suggestions("x", "zh") == ["一一", "叮叮"]
     assert firstrun.hash_code("session-1") == 607795898

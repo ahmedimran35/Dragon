@@ -895,7 +895,7 @@ const zhCN: Record<string, string> = {
       Idle: "空闲",
                                   // -- the community notice and the gate (0.1.22) --
               "Chat apps": "聊天入口",
-          // -- data controls (relay 0.9): the one switch over what the relay keeps --
+          // -- data controls: what is kept locally --
   "Data controls": "数据控制",
                                   // -- the first-sign-in steps: a password, which model answers (relay 0.5) --
           "Not now": "以后再说",
@@ -1180,10 +1180,10 @@ const zhCN: Record<string, string> = {
     "在侧栏显示「编程」（这台电脑上的 Cursor、Codex 等编程智能体），并在下面显示运行时的地址。仅此浏览器。",
   "Runtime:": "运行时：",
   "the token is in the server_token file in the data folder": "令牌在数据目录的 server_token 文件里",
+  "see docs/cli.md in the repository": "详见仓库中的 docs/cli.md",
   "The command line and the API": "命令行与 API",
-  "Dragon on DeepSeek Harness": "Dragon 的 DeepSeek Harness 版",
                 
-  // the Feed the way the Android app draws it
+  // the Feed, in the app's own style
   "Feed settings": "动态设置",
   "About the feed": "动态版块说明",
   "Your feed is driven by the instruction below. Any edit you make here applies to every post from now on.": "动态由下面这句话来定。在这里改动它，今后的每一条帖子都会照着来。",

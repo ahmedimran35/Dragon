@@ -131,7 +131,7 @@ def _settings(config: Path | None, auto: bool = False) -> Settings:
     vault = CredentialVault(settings.vault_file, settings.vault_key_file)
     if not llm_ready(settings.llm, vault, settings.data_dir):
         console.print(
-            "[yellow]No model yet.[/yellow] Sign in to Dragon Cloud in the app, set "
+            "[yellow]No model yet.[/yellow] Set "
             "[bold]llm.api_key[/bold] in config.toml (run `dragon config init`), "
             "or export DEEPSEEK_API_KEY / OPENAI_API_KEY."
         )
@@ -940,8 +940,7 @@ def triggers_add(
     ] = "",
     lead: Annotated[int, typer.Option(help="event: minutes before the start")] = 30,
 ) -> None:
-    """Add a trigger. Mail triggers need the email connector, event triggers a calendar,
-    device triggers the hub."""
+    """Add a trigger. Mail triggers need the email connector, event triggers a calendar."""
     from dragon.triggers import TriggerStore
 
     s = _settings(config)

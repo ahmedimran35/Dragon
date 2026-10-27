@@ -24,8 +24,8 @@ class Triggers(BaseTool):
         "`text` is the standing instruction: what to do each time, in the user's words; when it "
         "fires you get the mail, event, arrival or request as context and you do that work. "
         "Actions: `create` (kind, text, match, lead_minutes), `list`, `cancel` (trigger_id). "
-        "Mail triggers need the email connector, event triggers the calendar connector, device "
-        "triggers this computer being on the hub. Shows in the app under Upcoming."
+        "Mail triggers need the email connector, event triggers the calendar connector. "
+        "Shows in the app under Upcoming."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -107,10 +107,6 @@ class Triggers(BaseTool):
                 if kind == "event" and not have.get("event", False):
                     return ToolResult.fail(
                         "the calendar connector is not set up; the user adds a calendar under Connections first"
-                    )
-                    return ToolResult.fail(
-                        "this computer is not on the hub, so no device can be watched; "
-                        "the user joins the hub under Devices first"
                     )
                 item = self.store.create(
                     kind,

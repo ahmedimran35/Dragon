@@ -65,7 +65,7 @@ import { cx, relativeTime } from "../util";
 /** the provider tile that adds a custom endpoint to the runtime's list (#294); not a preset of the runtime's */
 const ADD_ENDPOINT = "add-endpoint";
 /** The guide to one's own key, the target of every "(how)". */
-const OWN_KEY_DOCS = "https://dragon.cn/own-key";
+const OWN_KEY_DOCS = "";
 
 /**
  * Connections: the model, your mailbox, your calendar, a browser, MCP servers — plugged in

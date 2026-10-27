@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cx } from "../util";
 
 /**
- * Dragon's list pieces, as the Android app draws them (ui/dragon/DragonChrome.kt): a white card
+ * Dragon's list pieces: a white card
  * with 16px corners on the grey canvas, rows of a bare glyph in ink, a label, a grey value
  * and a chevron, hairline dividers inset past the glyph, and the small grey captions set
  * under a card.

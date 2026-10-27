@@ -1,9 +1,9 @@
 """Where TLS finds its trust roots.
 
-httpx carries certifi and verifies with it; the standard library's ``ssl`` (the hub's
+httpx carries certifi and verifies with it; the standard library's ``ssl`` (the server's
 WebSocket, smtplib, imaplib) verifies with OpenSSL's default paths instead — which,
 in a bundled runtime, point at the build machine's Python. On a Mac without that
-Python the file is not there, the store is empty, and the relay's certificate cannot
+Python the file is not there, the store is empty, and a provider's certificate cannot
 be verified while the very same relay answers over httpx. ``ensure_ca_bundle`` points
 OpenSSL at certifi's bundle when its own paths hold nothing, before any context is made.
 """

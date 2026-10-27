@@ -9,7 +9,7 @@ accounts, no mobile or desktop shells.
 You need **Python 3.11+** and **Node 22** (web app only). Docker is optional.
 
 ```bash
-git clone https://github.com/dragon/Dragon && cd Dragon
+git clone https://github.com/<your-org>/dragon && cd dragon
 pip install -e '.[dev]'            # the runtime + dev tools
 pip install -e '.[browser,hands]'  # optional: Playwright, screen/mouse/keyboard
 cd web && npm ci && cd ..

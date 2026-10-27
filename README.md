@@ -16,7 +16,7 @@ There are no accounts, no cloud service and no telemetry. Dragon is a single run
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/dragon/Dragon && cd Dragon
+git clone https://github.com/<your-org>/dragon && cd dragon
 cp .env.example .env          # put your model key here (e.g. DEEPSEEK_API_KEY=…)
 docker compose up -d
 docker compose logs -f        # first run prints http://127.0.0.1:8787/#token=… once

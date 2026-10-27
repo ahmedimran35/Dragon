@@ -9,7 +9,7 @@ import { primaryBtn, secondaryBtn } from "./Form";
 import { Sheet } from "./Sheet";
 
 /**
- * "Share my avatar", as the Android app has it (`avatar/AvatarShare.kt`): five cards — a
+ * "Share my avatar": five cards — a
  * background, one of the face's poses, a speech bubble introducing it, the app's tagline —
  * drawn on a canvas so the picture is the same wherever it goes. Pick one; it goes out
  * through the browser's share sheet where there is one (phones, Safari), and downloads as
@@ -31,7 +31,7 @@ const PALETTES: Palette[] = [
   { id: "green", background: "#D9F0DF", accent: "#2E7D4F", mood: "error" },
 ];
 
-const REPO = "github.com/dragon/Dragon";
+const REPO = "";  // set in web/src/brand.ts when the project has a public home
 // the card, in CSS pixels; drawn at 2× for a crisp picture
 const W = 540;
 const H = 720;

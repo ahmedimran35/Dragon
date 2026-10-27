@@ -9,11 +9,10 @@ import { cx } from "../util";
 import { Avatar } from "./Avatar";
 import { useMenuKeys } from "./useMenuKeys";
 
-/** Where a bug goes, with what the page knows filled in. */
-function bugReportUrl(version: string): string {
-  const where = `Web app (${navigator.userAgent})`;
-  const params = new URLSearchParams({ template: "bug_report.yml", version: version || "", os: where });
-  return `https://github.com/dragon/Dragon/issues/new?${params.toString()}`;
+/** Where a bug goes. Empty: this deployment has no public issue tracker yet
+ *  (set `REPO_URL` in web/src/brand.ts and link to `${REPO_URL}/issues/new`). */
+function bugReportUrl(_version: string): string {
+  return "";
 }
 
 /**

@@ -19,9 +19,7 @@ from dragon.schema import RiskLevel, ToolResult
 from dragon.search import WebSearchProvider
 from dragon.tools.base import BaseTool, CallAssessment, int_arg
 
-USER_AGENT = (
-    f"Mozilla/5.0 (X11; Linux x86_64) Dragon/{__version__} (+https://github.com/dragon/Dragon)"
-)
+USER_AGENT = f"Mozilla/5.0 (X11; Linux x86_64) Dragon/{__version__}"
 
 
 def host_of(url: str) -> str | None:

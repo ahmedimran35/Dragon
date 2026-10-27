@@ -12,7 +12,7 @@ export const COLLAPSE_AT = 8;
 export interface ModelRow {
   id: string;
   name: string;
-  /** The relay's recommended one for that lane (marked in the picker; first in its group). */
+  /** The recommended one for that lane (marked in the picker; first in its group). */
   recommended?: boolean;
 }
 

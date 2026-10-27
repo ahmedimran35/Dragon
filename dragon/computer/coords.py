@@ -34,7 +34,7 @@ NORM = 1000  # the 0–1000 grid UI-TARS and Qwen3-VL answer in by default
 # The most pixels a picture for the model has (the shared budget rule: ≤ 2 Mpx before
 # encoding). A 4K screen comes down to half its side, 1080p (2.07 Mpx) is trimmed a
 # little, 1680×1050 and below pass untouched. A request with a few 4K JPEGs in it was what
-# hit the relay's body cap (413).
+# hit a provider's body cap (413).
 PICTURE_MAX_PIXELS = 2_000_000
 
 

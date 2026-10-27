@@ -1,7 +1,7 @@
 """The provider catalogue (contract C11): which own-key providers exist, what each can do.
 
-The source of truth is ``dragon/llm/providers.json`` next to this module — team Cloud writes
-it, the phone and desktop apps carry copies, the runtime reads it here. Each entry says where
+The source of truth is ``dragon/llm/providers.json`` next to this module — the runtime reads
+it here, and any client may carry a copy. Each entry says where
 the endpoint is, how a person gets a key, which regions it serves and which of the four
 capabilities it has: ``chat`` (talking), ``vision`` (the hands read screens), ``image``
 (pictures), ``video`` (clips). The rule every client follows: a feature whose capability no

@@ -1,22 +1,18 @@
 """The hands on this computer: a mouse and a keyboard, driven by coordinates.
 
-Three backends do the same eight things — click (left, right, middle, double), move, drag,
+Two backends do the same eight things — click (left, right, middle, double), move, drag,
 scroll, type, press keys, open an application:
 
-* ``desktop``: the Dragon Desktop app's own operator (UI-TARS-desktop's nut.js operator,
-  :mod:`dragon.computer.operator`), reached over loopback when the app started this
-  runtime (``DRAGON_OPERATOR_URL``). Preferred whenever it is there: the app is the
-  process the system grants input and screen capture to.
 * ``pyautogui`` (``pip install 'dragon[hands]'``): every platform; its fail-safe stays on,
   so throwing the mouse into a screen corner aborts whatever the hands were doing — a stop
   button that needs no window.
 * ``xdotool``: X11 only, no Python packages; also how non-ASCII text is typed on Linux when
   ``pyautogui`` cannot (it types by key codes, which have no 中文).
 
-Which one is used is ``[hands] backend``: ``auto`` takes the desktop operator when the app
-is around, then ``pyautogui`` when it is installed, then ``xdotool`` — except on macOS under
-the desktop app, where it is the operator or its reason (a fallback would mean a second TCC
-prompt for the runtime; :func:`dragon.computer.operator.operator_owns_the_screen`). Every backend moves
+Which one is used is ``[hands] backend``: ``auto`` takes ``pyautogui`` when it is installed,
+then ``xdotool``. On macOS the process that runs the runtime needs *Screen Recording* (the
+picture) and *Accessibility* (the input) granted to it under System Settings → Privacy &
+Security. Every backend moves
 in its own screen space — X11 root pixels, macOS points, Windows physical pixels — and
 says how big that space is (``size()``) so :class:`~dragon.computer.link.ComputerLink`
 can map the model's picture pixels onto it (:mod:`dragon.computer.coords`). Wayland
@@ -126,8 +122,8 @@ def _normalise_key(key: str, table: dict[str, str]) -> str:
 
 def _import_pyautogui() -> Any:
     """``pyautogui``, importable without Tk. Its ``mouseinfo`` dependency *exits the
-    interpreter* (``sys.exit``) when tkinter is missing on Linux — and the frozen runtime
-    leaves Tk out — which took every request on the Linux desktop app down with it. Nothing
+    interpreter* (``sys.exit``) when tkinter is missing on Linux — and a frozen runtime
+    leaves Tk out — which took every request down with it. Nothing
     here ever opens the MouseInfo window, so a stand-in module is registered first."""
     if "mouseinfo" not in sys.modules:
         try:
@@ -400,7 +396,7 @@ def _desktop_entry(name: str) -> Path | None:
     return best[1] if best else None
 
 
-BACKENDS = ("auto", "desktop", "pyautogui", "xdotool")
+BACKENDS = ("auto", "pyautogui", "xdotool")
 
 WAYLAND_TEXT = (
     "Wayland session: no global screen or cursor for a program to drive. Log in with Xorg "
@@ -414,8 +410,7 @@ def wayland_session(env: dict[str, str] | None = None) -> bool:
     all (no global pointer to move, a root grab that shows none of the native windows).
     ``XDG_SESSION_TYPE`` is what the login manager sets; a ``WAYLAND_DISPLAY`` without a
     ``DISPLAY`` is the same thing from a compositor started by hand. XWayland (both set,
-    session type wayland) counts: the X11 tools would reach X windows only. The desktop
-    app's operator (``harness/desktop/src/operator.ts``) draws the same line."""
+    session type wayland) counts: the X11 tools would reach X windows only."""
     if not _platform().startswith("linux"):
         return False
     e = os.environ if env is None else env
@@ -426,9 +421,7 @@ def wayland_session(env: dict[str, str] | None = None) -> bool:
 
 def _make_backend(name: str) -> HandsBackend:
     if name == "desktop":
-        from dragon.computer.operator import OperatorHands
-
-        return OperatorHands.from_env()
+        raise HandsUnavailable("the desktop operator is no longer part of Dragon")
     if name == "pyautogui":
         return PyAutoGUIHands()
     return XdotoolHands()
@@ -437,33 +430,13 @@ def _make_backend(name: str) -> HandsBackend:
 def pick_backend(preference: str = "auto") -> HandsBackend:
     """The hands to use, or :class:`HandsUnavailable` saying what is missing."""
     preference = (preference or "auto").lower()
-    from dragon.computer.operator import operator_env, operator_owns_the_screen
-
-    # The desktop app's operator goes first — and when it is there but says no (a Wayland
-    # session, a macOS permission missing), its reason is the one worth reading; the
-    # Python backends would fail for the same cause with vaguer words.
-    operator_reason = ""
-    if preference in ("auto", "desktop") and operator_env() is not None:
-        try:
-            backend = _make_backend("desktop")
-        except HandsUnavailable as exc:
-            operator_reason = str(exc)
-        else:
-            logger.info("computer hands: {}", backend.name)
-            return backend
     if preference == "desktop":
-        raise HandsUnavailable(
-            operator_reason or "the desktop operator is not running (no DRAGON_OPERATOR_URL)"
-        )
-    if operator_reason and operator_owns_the_screen():
-        # macOS under the desktop app: the operator or nothing. pyautogui here would ask
-        # TCC a second time, for the runtime, and the fix is the one the operator named.
-        raise HandsUnavailable(operator_reason)
+        raise HandsUnavailable("the desktop operator is no longer part of Dragon")
     if wayland_session():
         # Linux under Wayland: xdotool and pyautogui would start (XWayland is an X server)
         # and then move nothing the person can see — said plainly instead, once.
-        raise HandsUnavailable(operator_reason or WAYLAND_TEXT)
-    errors: list[str] = [operator_reason] if operator_reason else []
+        raise HandsUnavailable(WAYLAND_TEXT)
+    errors: list[str] = []
     order = {"pyautogui": ["pyautogui"], "xdotool": ["xdotool"]}.get(
         preference, ["pyautogui", "xdotool"]
     )

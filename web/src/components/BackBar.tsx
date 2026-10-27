@@ -5,7 +5,7 @@ import { useStore } from "../store";
 import { DragonRoundButton } from "./DragonHeader";
 
 /**
- * Dragon's page bar, the way the Android app draws it on every screen reached from the drawer or
+ * Dragon's page bar, on every screen reached from the drawer or
  * the "•••" menu: the back glyph on a white disc at the start, the title centred on the whole bar,
  * actions at the end, no rule under it. The optional description is the small grey caption Dragon
  * sets under a bar.

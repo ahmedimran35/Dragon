@@ -1467,8 +1467,8 @@ class Connections:
             hands["enabled"] = bool(body["enabled"])
         if body.get("backend") is not None:
             backend = str(body["backend"]).strip().lower() or "auto"
-            if backend not in ("auto", "desktop", "pyautogui", "xdotool"):
-                raise ValueError("backend must be 'auto', 'desktop', 'pyautogui' or 'xdotool'")
+            if backend not in ("auto", "pyautogui", "xdotool"):
+                raise ValueError("backend must be 'auto', 'pyautogui' or 'xdotool'")
             hands["backend"] = backend
         if body.get("mode") is not None:
             mode = str(body["mode"]).strip().lower() or "auto"

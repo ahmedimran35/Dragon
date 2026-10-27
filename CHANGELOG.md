@@ -5,6 +5,10 @@ All notable changes to Dragon are recorded here. The format follows
 
 ## [Unreleased]
 
+- The `desktop` hands backend is gone with the desktop app: `settings.hands.backend` now
+  accepts `auto`, `pyautogui` or `xdotool`, and an existing `desktop` value degrades to
+  `auto` (pyautogui when installed, else xdotool on X11).
+
 ## [0.1.0]
 
 Dragon: first release of the self-hosted, web-only agent runtime.
@@ -25,5 +29,5 @@ Dragon: first release of the self-hosted, web-only agent runtime.
   doctor | channels | chatgpt`.
 - Docker and Docker Compose deployment with the `dragon-data` volume.
 
-[Unreleased]: https://github.com/dragon/Dragon/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/dragon/Dragon/releases/tag/v0.1.0
+[Unreleased]: https://github.com/<your-org>/dragon/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/<your-org>/dragon/releases/tag/v0.1.0

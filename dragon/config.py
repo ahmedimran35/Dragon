@@ -109,7 +109,7 @@ class LLMSettings(BaseModel):
     # tool calling wants this on some endpoints).
     pass_reasoning: bool = False
     # The models that draw and animate the agent's face (the avatar studio), on the same
-    # host and key as the chat model. Empty: the relay's image model when the account is the
+    # host and key as the chat model. Empty: the chat provider's own image model when there is
     # provider, qwen-image-3.0 on Alibaba Cloud Model Studio, none elsewhere.
     image_model: str = ""
     video_model: str = ""
@@ -121,7 +121,7 @@ class LLMSettings(BaseModel):
     # `http://user:pass@host:port`, `socks5://host:port`), for a provider that this machine's
     # network cannot reach directly. Empty: the environment's HTTPS_PROXY / NO_PROXY apply as
     # usual. Honoured by the ChatGPT sign-in (`provider = "chatgpt"`): the Codex endpoint, the
-    # token refresh and the usage check all go through it; never Dragon Cloud.
+    # token refresh and the usage check all go through it.
     proxy: str = ""
     extra_headers: dict[str, str] = Field(default_factory=dict)
     extra_body: dict[str, Any] = Field(default_factory=dict)
@@ -555,9 +555,8 @@ class HandsSettings(BaseModel):
     """
 
     enabled: bool = False
-    # "auto": the desktop app's operator when it started this runtime, else pyautogui when
-    # installed, else xdotool on X11; or "desktop" / "pyautogui" / "xdotool"
-    backend: Literal["auto", "desktop", "pyautogui", "xdotool"] = "auto"
+    # "auto": pyautogui when installed, else xdotool on X11; or "pyautogui" / "xdotool"
+    backend: Literal["auto", "pyautogui", "xdotool"] = "auto"
     # How the model gives points: "pixels" of the picture it was shown (Qwen2.5-VL and the
     # computer_use dialect), or "norm1000" — a 0–1000 grid over the picture (Qwen3-VL's
     # default, UI-TARS). Boxes ([x1, y1, x2, y2]) are taken either way; their centre counts.
@@ -571,6 +570,12 @@ class HandsSettings(BaseModel):
     max_image_width: int = 1600
     # A pause after each action before the next screenshot, so the screen has settled.
     settle_s: float = 0.6
+
+    @field_validator("backend", mode="before")
+    @classmethod
+    def _desktop_backend_is_gone(cls, value: Any) -> Any:
+        # a config written before the desktop operator went away degrades to "auto"
+        return "auto" if value == "desktop" else value
 
 
 class ServerSettings(BaseModel):
@@ -967,8 +972,11 @@ def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
     if hands := data.get("hands"):
         if "enabled" in hands:
             settings.hands.enabled = bool(hands["enabled"])
-        if hands.get("backend") in ("auto", "desktop", "pyautogui", "xdotool"):
-            settings.hands.backend = hands["backend"]
+        backend = hands.get("backend")
+        if backend in ("auto", "pyautogui", "xdotool"):
+            settings.hands.backend = backend
+        elif backend == "desktop":  # before the desktop operator went away: back to "auto"
+            settings.hands.backend = "auto"
         if hands.get("coords") in ("pixels", "norm1000"):
             settings.hands.coords = hands["coords"]
         if hands.get("mode") in ("auto", "screen", "window"):

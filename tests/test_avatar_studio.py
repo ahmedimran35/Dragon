@@ -302,7 +302,7 @@ def test_redrawing_the_poses_needs_a_drawn_face(studio_server) -> None:
 
 
 def test_a_busy_provider_is_waited_out_two_pictures_at_a_time(studio_server, monkeypatch) -> None:
-    """A 429 from the provider (or the relay's `provider_busy`) is tried again after a pause
+    """A 429 from the provider is tried again after a pause
     rather than shown; the candidates are drawn two at a time so as not to provoke it."""
     client, service, fake = studio_server
     naps: list[float] = []

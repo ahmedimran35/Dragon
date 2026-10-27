@@ -180,7 +180,7 @@ class DragonApp:
 
     def chat_entry(self) -> Provider | None:
         """The catalogue entry the chat model is on: the one ``[llm] provider`` names, else
-        the one whose host ``base_url`` is. None for the relay, the ChatGPT sign-in and a
+        the one whose host ``base_url`` is. None for the ChatGPT sign-in and a
         host the catalogue does not list (a local server, a gateway)."""
         llm = self.settings.llm
         if llm.provider == CHATGPT_PROVIDER:

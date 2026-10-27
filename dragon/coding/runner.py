@@ -62,8 +62,8 @@ def agent_env(agent: str, source: dict[str, str] | None = None) -> dict[str, str
         if name.upper().startswith(tuple(allowed)):
             env[name] = value
     if agent == "dsh":
-        # the store the readers list: a DSH_HOME inherited from elsewhere (the desktop app
-        # points it at its own home) would run the chat where the list does not look
+        # the store the readers list: a DSH_HOME inherited from elsewhere would run the
+        # chat where the list does not look
         home = parent.get("DRAGON_CODING_HOME") or str(Path.home())
         env["DSH_HOME"] = str(Path(home) / ".dsh")
     env["NO_COLOR"] = "1"

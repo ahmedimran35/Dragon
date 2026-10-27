@@ -4,7 +4,7 @@ import { cx } from "../util";
 import { Avatar } from "./Avatar";
 
 /**
- * Dragon's page header, the one the Android app draws on the chat and the four tabs: the face
+ * Dragon's page header, on the chat and the four tabs: the face
  * centred on its pale disc, the name in a small white tag hanging off the chin with what the
  * agent is doing as the tag's second line, and a round button in each top corner. Two lines
  * are always reserved under the face so the page does not jump when a status appears.

@@ -8,10 +8,9 @@ happened in a small ``dragon-naming`` block at the end of its reply; the phase m
 that block and on nothing else. A reply without one means the person talked about something
 else, the model helped and steered back, and the phase stays.
 
-Phases: ``none → ask_user_name → ask_agent_name → named → done``. The same words, name
-pools and prompt as ``harness/dsh-dragon/src/firstrun.ts`` and
-``onboarding/FirstConversation.kt``; the pure machine is here, :class:`DragonService`
-applies it (the addendum for the bound thread only, ``after_turn`` when its reply ends).
+Phases: ``none → ask_user_name → ask_agent_name → named → done``. The pure machine is
+here, :class:`DragonService` applies it (the addendum for the bound thread only,
+``after_turn`` when its reply ends).
 """
 
 from __future__ import annotations

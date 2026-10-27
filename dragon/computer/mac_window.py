@@ -10,31 +10,22 @@ keyboard events, so 中文 and emoji arrive as they are. When Accessibility is g
 button under the point can be pressed through the accessibility tree (``AXPress``) instead
 of a synthetic click.
 
-Everything that talks to the system is behind :class:`MacAdapter`, a thin protocol with two
-real implementations, both imported lazily so this module imports on any platform:
+Everything that talks to the system is behind :class:`MacAdapter`, a thin protocol with one
+real implementation, imported lazily so this module imports on any platform:
 
-* :class:`OperatorWindowAdapter` — under Dragon Desktop, the usual case. The list of
-  windows and the picture of one come from the app's helper *Dragon Computer Use*
-  (``GET /windows``, ``POST /window`` of :mod:`dragon.computer.operator`), which holds
-  the Screen Recording grant and takes the picture with ScreenCaptureKit on macOS 14 and
-  later; the runtime never captures the screen itself there. The events still go out from
-  this process through pyobjc (``CGEventPostToPid`` posts to a pid; the helper's own
-  ``/execute`` drives the system pointer, which window mode must not touch).
-* :class:`QuartzAdapter` — the runtime on its own (no helper bundle, a run outside the
-  app): ``CGWindowListCopyWindowInfo`` and ``CGWindowListCreateImage`` through pyobjc,
-  announced in the log (``window mode: the runtime captures windows itself …``).
+* :class:`QuartzAdapter` — the runtime on its own: ``CGWindowListCopyWindowInfo`` and
+  ``CGWindowListCreateImage`` through pyobjc, announced in the log
+  (``window mode: the runtime captures windows itself …``).
 
 The logic above the adapter — choosing a window, mapping the model's coordinates (pixels
 of the window picture) to screen points, sequencing the events of a click, a drag, a
 scroll, a typed string, a key combination — is :class:`MacWindowHands`, and runs against a
 fake adapter in the tests on Linux.
 
-What the person grants once: *Screen Recording* for the capture — the helper's row,
-**Dragon Computer Use**, under the app; *Accessibility* for the events (``CGEventPostToPid``
-needs the posting process to be trusted), which macOS attributes to the *responsible*
-application — the desktop app that spawned this runtime — so that row is **Dragon** (a
-runtime started from a terminal is attributed to that terminal). Without the helper the
-capture needs the app's own Screen Recording row as well. The settings page says which is
+What the person grants once, to the process that runs the runtime: *Screen Recording* for
+the capture and *Accessibility* for the events (``CGEventPostToPid`` needs the posting
+process to be trusted) — which macOS attributes to the *responsible* application (a runtime
+started from a terminal is attributed to that terminal). The settings page says which is
 missing. Everything here fails soft: a window that cannot be found, captured or driven
 raises :class:`WindowUnavailable` with the reason (:class:`WindowLayerBroken` when the
 layer itself failed), and :class:`~dragon.computer.link.ComputerLink` falls back to the
@@ -43,13 +34,11 @@ shared screen with a notice.
 
 from __future__ import annotations
 
-import base64
 import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from dragon.computer.operator import OperatorClient, OperatorError
 from dragon.logger import logger
 
 # how many characters one unicode keyboard event carries (CGEvent takes ≤ 20 UTF-16 units)
@@ -365,9 +354,9 @@ class MacWindowHands:
             ) from exc
         if not png:
             raise WindowUnavailable(
-                f"the window of {window.owner} came back empty: switch on Dragon Desktop "
-                "(only that entry) under System Settings → Privacy & Security → Screen "
-                "Recording, then quit and reopen the app"
+                f"the window of {window.owner} came back empty: switch on Screen Recording "
+                "for this process (only that entry) under System Settings → Privacy & "
+                "Security → Screen Recording, then quit and reopen it"
             )
         width, height = png_size(png)
         if not width or not height:
@@ -548,11 +537,10 @@ class QuartzAdapter:
     def capture(self, window_id: int) -> bytes | None:
         q = self.q
         if not self._announced:
-            # under the app the helper does this (OperatorWindowAdapter); here the runtime is
-            # on its own and the capture is attributed to whatever started it
+            # the capture is attributed to whatever process runs the runtime
             logger.info(
-                "window mode: the runtime captures windows itself with CGWindowListCreateImage "
-                "(no Dragon Computer Use helper); Screen Recording must be on for this process"
+                "window mode: the runtime captures windows itself with CGWindowListCreateImage; "
+                "Screen Recording must be on for this process"
             )
             self._announced = True
         image = q.CGWindowListCreateImage(
@@ -641,84 +629,6 @@ class QuartzAdapter:
             return False
 
 
-# ---------------------------------------------------------------------- through the helper
-class OperatorWindowAdapter:
-    """Window mode under Dragon Desktop: the windows and their pictures come from the
-    app's helper through the operator (``/windows``, ``/window``), the events go out through
-    ``events`` — a :class:`QuartzAdapter` by default, a fake in the tests.
-
-    The operator's refusals come back in its words: a 403 (the helper's Screen Recording
-    row is off) and a 404 (the window is gone) are :class:`WindowUnavailable`, retried on
-    the next look; anything else (the helper did not start, the app's server is gone)
-    is raised as is and read as the layer failing (:class:`WindowLayerBroken`)."""
-
-    def __init__(self, client: OperatorClient, events: MacAdapter | None = None) -> None:
-        self.client = client
-        self.events: MacAdapter = events if events is not None else QuartzAdapter()
-
-    # -- windows (the helper's)
-    def windows(self) -> list[WindowInfo]:
-        try:
-            listed = self.client.windows()
-        except OperatorError as exc:
-            if exc.status == 403:
-                raise WindowUnavailable(str(exc)) from exc
-            raise
-        out: list[WindowInfo] = []
-        for raw in listed:
-            bounds = raw.get("bounds") or [0, 0, 0, 0]
-            if not isinstance(bounds, list) or len(bounds) != 4:
-                bounds = [0, 0, 0, 0]
-            try:
-                out.append(
-                    WindowInfo(
-                        id=int(raw.get("id") or 0),
-                        pid=int(raw.get("pid") or 0),
-                        owner=str(raw.get("app") or ""),
-                        title=str(raw.get("title") or ""),
-                        x=float(bounds[0] or 0),
-                        y=float(bounds[1] or 0),
-                        width=float(bounds[2] or 0),
-                        height=float(bounds[3] or 0),
-                        layer=int(raw.get("layer") or 0),
-                        on_screen=bool(raw.get("on_screen", True)),
-                        bundle_id=str(raw.get("bundle_id") or ""),
-                    )
-                )
-            except (TypeError, ValueError):
-                continue
-        return out
-
-    def capture(self, window_id: int) -> bytes | None:
-        try:
-            shot = self.client.window(window_id)
-        except OperatorError as exc:
-            if exc.status in (403, 404):
-                raise WindowUnavailable(str(exc)) from exc
-            raise
-        data = str(shot.get("base64") or "")
-        return base64.b64decode(data) if data else None
-
-    # -- events (this process's, through pyobjc)
-    def post_mouse(self, pid: int, event: MouseEvent) -> None:
-        self.events.post_mouse(pid, event)
-
-    def post_key(self, pid: int, event: KeyEvent) -> None:
-        self.events.post_key(pid, event)
-
-    def post_text(self, pid: int, text: str) -> None:
-        self.events.post_text(pid, text)
-
-    def post_scroll(self, pid: int, x: float, y: float, dy: float, dx: float = 0.0) -> None:
-        self.events.post_scroll(pid, x, y, dy, dx)
-
-    def ax_press(self, x: float, y: float) -> bool:
-        return self.events.ax_press(x, y)
-
-    def trusted(self) -> bool:
-        return self.events.trusted()
-
-
 __all__ = [
     "KEY_ALIASES",
     "MODIFIERS",
@@ -728,7 +638,6 @@ __all__ = [
     "MacAdapter",
     "MacWindowHands",
     "MouseEvent",
-    "OperatorWindowAdapter",
     "QuartzAdapter",
     "WindowFrame",
     "WindowInfo",

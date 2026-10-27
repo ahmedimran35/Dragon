@@ -130,7 +130,7 @@ async def test_the_responses_client_sends_it_as_well(wire: Wire):
 
 
 async def test_other_vendors_get_no_session_header_but_are_told_the_name(wire: Wire):
-    """Dragon Cloud answers the Dragon clients only (relay 0.28) and reads the user
+    """A vendor that answers named clients only reads the user
     agent for it, so the runtime names itself to every vendor, as the phones do; the
     conversation id goes only where a vendor asks for one."""
     for provider, base_url in (("opencode-zen", None), ("deepseek", None), ("openai", None)):

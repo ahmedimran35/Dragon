@@ -10,7 +10,7 @@ import { cx } from "../util";
  * for the agent — the model's suggestions or two from the built-in pool — and "Something
  * else" for a name of the person's own: an input on the card, saved by the pick endpoint
  * the way a chip is, never waiting on the model to repeat the name in a `dragon-naming`
- * block. The desktop (`firstrun.ts`) and the phones draw the same card.
+ * block.
  */
 
 /** The opening lines, drawn as the agent's grey bubbles; they are not messages the model sees. */

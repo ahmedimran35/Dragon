@@ -1,14 +1,12 @@
 """A picture of this computer's screen, and the name of the window in front.
 
-``take_screenshot`` is what the hub's ``screen`` action and the ``computer_screen`` tool
+``take_screenshot`` is what the ``computer_screen`` tool and the rest of the hands
 share: ``mss`` + Pillow when they are installed (every platform, no external program), else
 the platform's own tool (``screencapture``, PowerShell, ``grim`` / ``gnome-screenshot`` /
 ``spectacle`` / ``import`` / ``scrot``). The picture is scaled for the model — capped at
 ``max_width``, then to the size the Qwen-VL family would resize it to anyway
 (:func:`dragon.computer.coords.picture_size`), so the model's pixels are the picture's;
 the capture's own size is returned next to it so coordinates map back to the real screen.
-This is the fallback: the desktop app's operator (:mod:`dragon.computer.operator`) takes
-the screenshot when the app started the runtime.
 
 ``active_window`` names what is in front — *Firefox*, *Terminal* — so an approval card and
 the audit log can say *in Firefox*.
@@ -101,10 +99,10 @@ class BlackScreen(RuntimeError):
 
 
 BLACK_SCREEN_HINT = (
-    "the screenshot came back all black. On macOS, switch on Dragon Desktop (only that "
-    "entry) in System Settings → Privacy & Security → Screen Recording, then quit and reopen "
-    "the app: macOS applies that permission only to freshly started processes. On Linux, "
-    "the hands need an X11 session (or XWayland)."
+    "the screenshot came back all black. On macOS, switch on Screen Recording for this "
+    "process (only that entry) in System Settings → Privacy & Security → Screen Recording, "
+    "then quit and reopen it: macOS applies that permission only to freshly started "
+    "processes. On Linux, the hands need an X11 session (or XWayland)."
 )
 
 

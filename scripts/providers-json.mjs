@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-// Copies the own-key provider catalogue (dragon/llm/providers.json, the source of truth;
-// contract C11) to the clients that cannot read the runtime's package data — the desktop
-// plugin's assets, the Android app's assets, the iPhone app's bundle — and to the relay,
-// which orders it per region for its "ways on" guidance. Run after editing the catalogue:
+// Validates the own-key provider catalogue (dragon/llm/providers.json, the source of
+// truth; contract C11). The runtime reads it from its own package, so there is nothing to
+// copy it to any more — this script only checks it, so a typo never reaches a user:
 //
-//   node scripts/providers-json.mjs          # write
-//   node scripts/providers-json.mjs --check  # exit 1 when a copy is stale (CI)
+//   node scripts/providers-json.mjs          # validate
+//   node scripts/providers-json.mjs --check  # same, kept for CI
 //
 // The file is `{version, updated, capabilities[], auth_kinds[], providers[]}`; each provider
 // has `id`, `name`, `name_zh`, `protocol` (openai | openai-responses | anthropic | gemini),
@@ -22,28 +21,16 @@
 // match wins), `levels` are from minimal | low | medium | high | xhigh | max and `default` is
 // one of them or `none` (the vendor thinks only when asked); `listed: true` when the endpoint's
 // model list names each model's levels (OpenRouter). A provider without the hint shows no
-// thinking control on the desktop; the phones ignore the field.
+// thinking control in the web app.
 // An optional `session_header` names the request header in which the vendor's docs ask a client
-// to send one stable id per conversation (OpenCode Go: `x-opencode-session`). The runtime sends
-// it with its own user agent; the desktop writes such an entry as its model adapter's catalog
-// route of the same id, which sends the header itself; the phones send it to OpenCode's host
-// (io.github.dragon.net.OpenCodeSession, DragonOpenCodeSession.swift); the relay's guidance
-// lists such an entry apart, under `session_providers`, so the apps of before never offer it.
-// The copies are byte-identical to the source; the source is validated here so a typo never
-// reaches a client.
-import { readFileSync, writeFileSync } from 'node:fs'
+// to send one stable id per conversation (OpenCode Go: `x-opencode-session`); the runtime
+// sends it with its own user agent.
+import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const source = resolve(root, 'dragon/llm/providers.json')
-const targets = [
-  resolve(root, 'harness/dsh-dragon/assets/providers.json'),
-  resolve(root, 'android/src/android/app/src/main/assets/dragon/providers.json'),
-  resolve(root, 'android/src/ios/Dragon/Resources/providers.json'),
-  // the relay builds the "ways on" guidance from the same facts (cloud/dragon_cloud/providers.py)
-  resolve(root, 'cloud/dragon_cloud/providers.json'),
-]
 
 const PROTOCOLS = new Set(['openai', 'openai-responses', 'anthropic', 'gemini'])
 const REGIONS = new Set(['cn', 'global'])
@@ -74,12 +61,6 @@ function reasoningProblems(where, protocol, hint) {
   for (const k of Object.keys(hint)) if (!['doc', 'wire', 'rules', 'listed'].includes(k)) out.push(`${where}: unknown reasoning field ${k}`)
   return out
 }
-
-// A checkout with core.autocrlf turns the source's LF into CRLF (nothing under dragon/ is
-// pinned to LF in .gitattributes) while harness/ and the phones' assets are pinned to LF, so
-// compared as raw text three of the four copies read as stale on Windows and a person
-// regenerated a diff that changed nothing. The content is what this asks about.
-const content = (s) => s.replace(/\r\n/g, '\n')
 
 const text = readFileSync(source, 'utf8')
 const catalogue = JSON.parse(text)
@@ -128,18 +109,4 @@ if (problems.length) {
   process.exit(2)
 }
 
-let stale = false
-for (const target of targets) {
-  if (process.argv.includes('--check')) {
-    let current = ''
-    try { current = readFileSync(target, 'utf8') } catch { /* missing counts as stale */ }
-    if (content(current) !== content(text)) { stale = true; console.error(`stale: ${target}`) }
-  } else {
-    writeFileSync(target, content(text))
-    console.log(`${target}: ${catalogue.providers.length} providers`)
-  }
-}
-if (stale) {
-  console.error(`run \`node scripts/providers-json.mjs\` and commit the result`)
-  process.exit(1)
-}
+console.log(`providers.json: ${catalogue.providers.length} providers, ${capabilities.size} capabilities — OK`)

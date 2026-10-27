@@ -15,14 +15,11 @@ picture's size, and every ``x``/``y`` the tools accept is a pixel of it. The han
 their own screen space (``screen_w``/``screen_h``: X11 root pixels, macOS points, Windows
 physical pixels), and the one place the two meet is :class:`~dragon.computer.coords.Mapping`
 — applied in ``_do`` before an action and in ``_where`` before the overlay hears of it.
-When Dragon Desktop started this runtime, its operator (:mod:`dragon.computer.operator`)
-takes the screenshot and does the moving; otherwise the Python backends do.
 
 Two modes (``[hands] mode``). *Screen*: the whole screen through ``mss`` and the system
 mouse. *Window* (macOS, :mod:`dragon.computer.mac_window`): one application's window —
-the picture the model sees is that window (taken by the desktop app's helper when the app
-is around, by the runtime's own Quartz call otherwise), events go to that process, the
-person keeps the cursor. ``auto`` is window mode on macOS as soon as a target application is set
+the picture the model sees is that window (taken by the runtime's own Quartz call),
+events go to that process, the person keeps the cursor. ``auto`` is window mode on macOS as soon as a target application is set
 (``set_target``, the ``computer_target`` action or ``app`` on ``computer_act``), screen
 everywhere else. A window that cannot be found or captured drops back to the screen with a
 note in the observation, never an error that ends the task.
@@ -42,7 +39,6 @@ from typing import Any
 
 from dragon.computer import hands as hands_mod
 from dragon.computer import mac_window
-from dragon.computer import operator as operator_mod
 from dragon.computer.coords import Mapping
 from dragon.computer.screen import DEFAULT_MAX_WIDTH, active_window, capture, screen_size
 from dragon.config import HandsSettings
@@ -113,20 +109,7 @@ class ComputerLink:
         )
 
     def _initial_size(self) -> tuple[int, int]:
-        """The hands' screen space before the first look: the desktop operator's word when
-        the app is around (asking Python's capture layer on macOS would be a second
-        Screen Recording prompt, for a process that never takes the picture), else the
-        capture's own size."""
-        found = operator_mod.operator_env()
-        if self._backend is None and found is not None:
-            try:
-                info = operator_mod.OperatorClient(*found).info()
-            except operator_mod.OperatorError as exc:
-                logger.debug("desktop operator not asked for the screen size: {}", exc)
-            else:
-                return operator_mod.display_size(info)
-            if operator_mod.operator_owns_the_screen():
-                return 0, 0  # the first look through the operator sets it; never mss here
+        """The hands' screen space before the first look: the capture's own size."""
         return screen_size()
 
     # ------------------------------------------------------------------ the device
@@ -197,21 +180,10 @@ class ComputerLink:
         return mac_window.available()
 
     def _window_hands(self) -> mac_window.MacWindowHands:
-        """The window hands, made on first use: under the desktop app with its helper
-        bundle, the windows and their pictures come through the operator (the helper holds
-        Screen Recording and captures with ScreenCaptureKit); otherwise the runtime's own
-        Quartz path, which says so in the log."""
+        """The window hands, made on first use: the runtime's own Quartz path (windows
+        listed and captured by this process, announced in the log)."""
         if self._window is None:
-            operator = self._operator()
-            adapter: mac_window.MacAdapter
-            if operator is not None and operator.helper_present:
-                logger.info(
-                    "window mode: windows are listed and captured through the desktop app's helper"
-                )
-                adapter = mac_window.OperatorWindowAdapter(operator.client)
-            else:
-                adapter = mac_window.QuartzAdapter()
-            self._window = mac_window.MacWindowHands(adapter)
+            self._window = mac_window.MacWindowHands(mac_window.QuartzAdapter())
         return self._window
 
     def set_target(self, app: str, title: str = "") -> None:
@@ -303,40 +275,10 @@ class ComputerLink:
         self.last_screen = screen
         return screen
 
-    def _operator(self) -> operator_mod.OperatorHands | None:
-        """The desktop app's operator, when it is the hands in use."""
-        try:
-            hands = self._hands()
-        except hands_mod.HandsUnavailable:
-            return None
-        return hands if isinstance(hands, operator_mod.OperatorHands) else None
-
     def _capture_screen(self) -> dict[str, Any] | None:
-        """The whole screen: through the desktop operator when it has the hands (then the
-        Python capture layer is never touched — on macOS it would be a second Screen
-        Recording prompt for a process that does not need it), else the Python capture.
-
-        On macOS under the desktop app there is no "else": when the app set the operator
-        variables, the screenshot goes through the operator or fails with the operator's
-        reason (the permission text) — never ``mss`` / ``screencapture``, which would mean a
-        second TCC prompt, for the runtime, and a second error text. Linux, Windows and runs
-        without the app keep the Python capture."""
+        """The whole screen, through the Python capture layer (``mss``, or the platform's
+        own screenshot tool)."""
         max_width = self.settings.max_image_width or DEFAULT_MAX_WIDTH
-        operator = self._operator()
-        if operator is not None:
-            try:
-                raw = operator_mod.operator_capture(operator.client, max_width)
-            except operator_mod.OperatorError as exc:
-                raise DeviceError(f"could not take a screenshot of this computer: {exc}") from exc
-            if raw is not None:
-                try:
-                    raw["app"], raw["app_name"] = active_window()
-                except Exception:  # noqa: BLE001 — the picture matters, the name is a caption
-                    raw["app"], raw["app_name"] = "", ""
-                return raw
-        if operator_mod.operator_owns_the_screen():
-            why = self._backend_error or "the desktop app's operator returned no picture"
-            raise DeviceError(f"could not take a screenshot of this computer: {why}")
         if hands_mod.wayland_session():
             # Linux under Wayland: mss would grab the XWayland root — black, or the X
             # windows alone — and the hands could not act on it anyway. Said plainly, on

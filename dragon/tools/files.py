@@ -209,7 +209,7 @@ class Files(BaseTool):
                     return await self.execute(action="list", path=path)
                 if target.suffix.lower() == ".pdf":
                     # pypdf on a long document takes seconds: off the event loop, so the
-                    # web app and the hub keep answering meanwhile
+                    # web app keeps answering meanwhile
                     text = await asyncio.to_thread(pdf_text, target)
                     if len(text) > MAX_READ_CHARS:
                         text = text[:MAX_READ_CHARS] + f"\n... [truncated, {len(text)} chars total]"

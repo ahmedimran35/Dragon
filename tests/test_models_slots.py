@@ -185,21 +185,21 @@ def test_image_and_video_slots_round_trip(settings: Settings) -> None:
         assert client.get("/api/providers").json()["configured"]["image"]["provider"] == "custom"
 
         # a reference to a key the vault already holds (the account's) is kept as written
-        service.app.vault.set("DRAGON_CLOUD_KEY", "nmc-key")
+        service.app.vault.set("MODEL_API_KEY", "test-key")
         ref = client.put(
             "/api/connections/image",
-            json={"provider": "bailian", "api_key": "{{vault:DRAGON_CLOUD_KEY}}"},
+            json={"provider": "bailian", "api_key": "{{vault:MODEL_API_KEY}}"},
         ).json()
         assert ref["key_source"] == "vault"
-        assert _settings_file(settings)["image"]["api_key"] == "{{vault:DRAGON_CLOUD_KEY}}"
+        assert _settings_file(settings)["image"]["api_key"] == "{{vault:MODEL_API_KEY}}"
         assert service.app.vault.get("IMAGE_API_KEY") == "sk-img"  # untouched
         ep = service.avatar.endpoint()
-        assert ep is not None and ep.api_key == "nmc-key"
+        assert ep is not None and ep.api_key == "test-key"
         missing = client.put(
             "/api/connections/image", json={"api_key": "{{vault:NOBODY_HAS_THIS}}"}
         ).json()
         assert missing["key_source"] == "missing"
-        service.app.vault.delete("DRAGON_CLOUD_KEY")  # signed out again
+        service.app.vault.delete("MODEL_API_KEY")  # key removed
 
         # clearing: all four empty, and the slot is gone from the file and the vault
         cleared = client.put(

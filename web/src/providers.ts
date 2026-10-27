@@ -11,6 +11,9 @@
 import { useEffect, useState } from "react";
 import catalogue from "../../dragon/llm/providers.json";
 import { api } from "./api";
+import { OWN_KEY_DOCS_URL } from "./brand";
+
+export { OWN_KEY_DOCS_URL };
 import type { Capability, CatalogueProvider, ProvidersView } from "./types";
 
 export type { Capability, CatalogueProvider, ProvidersView };
@@ -152,7 +155,6 @@ export function unavailableLine(t: (s: string, v?: Record<string, string | numbe
 }
 
 /** The guide every unavailable line links to. */
-export const OWN_KEY_DOCS_URL = "https://dragon.cn/own-key";
 
 /**
  * The runtime's view when it has one; else the bundled catalogue with nothing known about
