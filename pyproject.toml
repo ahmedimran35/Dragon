@@ -79,9 +79,10 @@ all = ["dragon[server,browser,hands,dev,channels]"]
 dragon = "dragon.cli:app"
 
 [project.urls]
-Repository = "https://github.com/dragon/Dragon"
-Issues = "https://github.com/dragon/Dragon/issues"
-Changelog = "https://github.com/dragon/Dragon/blob/main/CHANGELOG.md"
+# Set these once the project has a public home; they are published on PyPI.
+# Repository = "https://github.com/<your-org>/dragon"
+# Issues = "https://github.com/<your-org>/dragon/issues"
+# Changelog = "https://github.com/<your-org>/dragon/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dragon"]

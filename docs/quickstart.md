@@ -9,7 +9,7 @@
 ## Run with Docker
 
 ```bash
-git clone https://github.com/dragon/Dragon && cd Dragon
+git clone https://github.com/<your-org>/dragon && cd dragon
 cp .env.example .env        # put at least one model key here, e.g. DEEPSEEK_API_KEY=sk-…
 docker compose up -d
 docker compose logs -f
