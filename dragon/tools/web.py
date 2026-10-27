@@ -22,11 +22,11 @@ from dragon.tools.base import BaseTool, CallAssessment, int_arg
 USER_AGENT = f"Mozilla/5.0 (X11; Linux x86_64) Dragon/{__version__}"
 
 # The line every search and fetch ends with. Tool output is where the model looks last, and
-# a weak one has to be told there that site work continues on the page, not in more fetches.
+# a weak one has to be told there that web work is done in the browser, where the user
+# watches it live, and these reads are only the fallback.
 BROWSER_NUDGE = (
-    "If the task is to work a website rather than read about it (search through its results, "
-    "compare options, fill a form, sign in, buy or book), open it with the `browser` tool and "
-    "finish the job on the page."
+    "Web work is done in the `browser` tool, where the user watches it live; this quick read "
+    "is the fallback for when the browser cannot do the step."
 )
 
 
@@ -138,9 +138,9 @@ class WebSearch(BaseTool):
 
     name: str = "web_search"
     description: str = (
-        "Search the web. Returns titles, URLs and snippets. Use `web_fetch` to read a result in "
-        "full. When the job is to work on a website (search anything and dig through its results, "
-        "compare options, fill a form, sign in, buy or book), use the `browser` tool instead."
+        "Search the web and return titles, URLs and snippets, without opening a page. The fallback "
+        "for when the browser cannot do the step; normally searching is done in the `browser` tool, "
+        "which the user watches live."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -191,10 +191,9 @@ class WebFetch(BaseTool):
     name: str = "web_fetch"
     description: str = (
         "Fetch a public web page or API (HTTP GET only) and return its readable content as "
-        "markdown/text (HTML is converted, JSON is pretty-printed). Use for reading articles, docs, "
-        "prices, schedules. When the job is to work the page rather than read it (search anything "
-        "and dig through its results, compare options, fill a form, sign in, buy or book), use the "
-        "`browser` tool instead."
+        "markdown/text (HTML is converted, JSON is pretty-printed). The fallback for a raw API body "
+        "or a page the `browser` tool cannot open; reading a page is normally done in the `browser` "
+        "tool."
     )
     parameters: dict[str, Any] = {
         "type": "object",

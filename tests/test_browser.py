@@ -196,6 +196,22 @@ async def test_actions_produce_the_same_summary_and_frames_on_any_backend(tmp_pa
     assert not res.ok and "no longer on the page" in (res.error or "")
 
 
+async def test_missing_arguments_show_the_call_shape(tmp_path: Path):
+    """A weak model that omits an argument is shown the shape to call, not just told it is
+    missing something."""
+    backend = FakeBackend()
+    tool, _ = tool_with(backend, tmp_path)
+
+    bad = await tool.execute(action="navigate")
+    assert not bad.ok and '"action": "navigate"' in (bad.error or "")
+    bad = await tool.execute(action="click")
+    assert not bad.ok and "action=extract" in (bad.error or "")
+    bad = await tool.execute(action="type", index=1)
+    assert not bad.ok and '"submit": true' in (bad.error or "")
+    bad = await tool.execute(action="fetch")
+    assert not bad.ok and '"action": "fetch"' in (bad.error or "")
+
+
 async def test_navigate_refuses_localhost_redirects_and_private_final_urls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):

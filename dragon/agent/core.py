@@ -24,7 +24,7 @@ from dragon.memory import MemoryItem, MemoryStore
 from dragon.schema import AgentState, Attachment, Message, Role, ToolResult
 from dragon.sentinel import AuditLog, Sentinel
 from dragon.skills import SkillLibrary
-from dragon.tools.base import ToolCollection
+from dragon.tools.base import BaseTool, ToolCollection
 from dragon.ui import UI
 
 
@@ -54,6 +54,29 @@ class Incoming:
         self.model = model
         self.delivery = delivery
         self.run = run
+
+
+# The light web tools step aside when the browser is registered: web work happens in the
+# browser, where the user watches it live, and the browser's own `fetch` covers raw reads.
+LIGHT_WEB_TOOLS = ("web_search", "web_fetch")
+
+
+def model_facing(tools: ToolCollection) -> list[BaseTool]:
+    """What the model may call. With the browser among the tools, ``web_search`` and
+    ``web_fetch`` are not offered at all: a prompt rule is not enough to keep a weak model
+    from reaching for them, and web work belongs where the user can watch it happen."""
+    if "browser" not in {t.name for t in tools}:
+        return list(tools)
+    return [t for t in tools if t.name not in LIGHT_WEB_TOOLS]
+
+
+def call_refused(name: str, tools: ToolCollection) -> str | None:
+    """Why a call does not run, when it does not. The light web tools are not offered
+    beside the browser (see :func:`model_facing`); a name recalled from earlier in the
+    conversation is turned back with the right one instead of quietly running."""
+    if name in LIGHT_WEB_TOOLS and "browser" in {t.name for t in tools}:
+        return f"{name} is not offered while the browser is open. Do this with the `browser` tool."
+    return None
 
 
 class DragonAgent:
@@ -305,7 +328,7 @@ class DragonAgent:
             sentinel_mode=self.settings.sentinel.mode,
             sandbox=self.sandbox_note(),
             contacts=self.contacts_note(),
-            tool_names=", ".join(t.name for t in self.tools),
+            tool_names=", ".join(t.name for t in model_facing(self.tools)),
             user_profile=profile,
             memories=memories,
             goals=goals + calendar + self.computer_section() + self.skills_section(),
@@ -381,7 +404,7 @@ class DragonAgent:
         attached = {"files": [a.path for a in files]} if files else {}
         self.audit.record("user_message", content=user_input, **attached)
         system_prompt = self.build_system_prompt(user_input, await self.recall_for(user_input))
-        tool_params = self.tools.to_params()
+        tool_params = [t.to_param() for t in model_facing(self.tools)]
         final: str | None = None
         step = 0
         empty_replies = 0
@@ -461,8 +484,11 @@ class DragonAgent:
                 pictures: list[str] = []
                 for call in response.tool_calls:
                     tool = self.tools.get(call.name)
+                    refused = call_refused(call.name, self.tools)
                     if tool is None:
                         summary = f"{call.name}(?)"
+                    elif refused is not None:
+                        summary = f"{call.name}: not offered beside the browser"
                     elif "__raw__" in call.arguments:
                         raw = str(call.arguments["__raw__"])
                         summary = f"{call.name}: arguments cut off ({len(raw)} chars)"
@@ -475,8 +501,11 @@ class DragonAgent:
                     self.ui.on_tool_call(call, summary)
                     if tool is None:
                         result = ToolResult.fail(
-                            f"unknown tool '{call.name}'. Available tools: {', '.join(t.name for t in self.tools)}"
+                            f"unknown tool '{call.name}'. Available tools: "
+                            f"{', '.join(t.name for t in model_facing(self.tools))}"
                         )
+                    elif refused is not None:
+                        result = ToolResult.fail(refused)
                     else:
                         result = await self.sentinel.guard(call, tool)
                     self.ui.on_tool_result(call, result)

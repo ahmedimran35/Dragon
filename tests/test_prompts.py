@@ -1,16 +1,38 @@
-"""The tool-routing guidance: website work goes to the browser, not the light web tools."""
+"""The tool-routing guidance: all web work is done in the browser, the light tools are the
+fallback for when it cannot do the step."""
 
 from dragon.prompts import SYSTEM_PROMPT
 from dragon.tools.browser import Browser
-from dragon.tools.web import WebFetch, WebSearch
+from dragon.tools.web import BROWSER_NUDGE, WebFetch, WebSearch
 
 
-def test_the_system_prompt_sends_site_work_to_the_browser():
-    assert "*on a website*" in SYSTEM_PROMPT
-    assert "open the `browser` tool and finish the task on the page" in SYSTEM_PROMPT
+def test_the_system_prompt_does_all_web_work_in_the_browser():
+    assert "All web work happens in the `browser` tool" in SYSTEM_PROMPT
+    assert "is read in the browser like anything else" in SYSTEM_PROMPT
 
 
-def test_the_light_web_tools_point_at_the_browser():
+def test_the_light_web_tools_are_the_fallback_only():
     for tool in (WebSearch(), WebFetch()):
-        assert "use the `browser` tool instead" in tool.description
-    assert Browser().description.startswith("Prefer this over")
+        assert "fallback" in tool.description
+        assert "`browser` tool" in tool.description
+    assert Browser().description.startswith("The tool for all web work")
+
+
+def test_reads_end_with_the_nudge_to_the_browser():
+    assert "browser" in BROWSER_NUDGE and "watches it live" in BROWSER_NUDGE
+
+
+def test_the_light_web_tools_are_not_offered_beside_the_browser():
+    from dragon.agent.core import call_refused, model_facing
+    from dragon.tools.base import ToolCollection
+    from dragon.tools.browser import Browser
+
+    with_browser = ToolCollection(WebSearch(), WebFetch(), Browser())
+    assert [t.name for t in model_facing(with_browser)] == ["browser"]
+    without = ToolCollection(WebSearch(), WebFetch())
+    assert [t.name for t in model_facing(without)] == ["web_search", "web_fetch"]
+    # a name recalled from earlier in the conversation is turned back, not run
+    assert call_refused("web_fetch", with_browser) is not None
+    assert call_refused("web_search", with_browser) is not None
+    assert call_refused("web_fetch", without) is None
+    assert call_refused("browser", with_browser) is None

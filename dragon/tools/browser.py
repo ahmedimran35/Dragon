@@ -109,10 +109,10 @@ def playwright_available() -> bool:
 class Browser(BaseTool):
     name: str = "browser"
     description: str = (
-        "Prefer this over `web_search`/`web_fetch` whenever the task happens on a website rather "
-        "than about one (searching anything and working through the results, comparing options, "
-        "reading a map or a listing, filling a form, signing in, buying or booking): it drives the "
-        "real page step by step and the user watches it live. "
+        "The tool for all web work: open a search engine or the site, search, read pages, fill "
+        "forms, click, sign in, buy or book, and finish the task on the page. The user watches it "
+        "live in the app and can take over it. A weather forecast, a price or a news page is read "
+        "here like anything else. "
         "Control a real web browser to complete tasks on websites (search, read, fill forms, click). "
         "Actions: `navigate` (url), `extract` (read current page + numbered interactive elements), "
         "`click` (index), `type` (index, text, submit=true to press Enter), `press` (key, e.g. 'Enter'), "
@@ -383,7 +383,10 @@ class Browser(BaseTool):
         await backend.set_url_guard(self._url_allowed)
         if action == "navigate":
             if not url:
-                return ToolResult.fail("`url` is required")
+                return ToolResult.fail(
+                    '`url` is required, for example {"action": "navigate", "url": '
+                    '"https://duckduckgo.com/?q=London+weather"}'
+                )
             if not url.lower().startswith(("http://", "https://")):
                 url = "https://" + url
             if not await self._url_allowed(url):
@@ -402,7 +405,10 @@ class Browser(BaseTool):
             return await self._state(backend, brief=False)
         if action == "click":
             if index is None:
-                return ToolResult.fail("`index` is required")
+                return ToolResult.fail(
+                    "`index` is required: the element number from the last page state "
+                    '(action=extract lists them), for example {"action": "click", "index": 3}'
+                )
             label = await self._label(backend, int(index))
             await backend.click_element(int(index))
             await backend.settle(self.timeout_ms)
@@ -410,7 +416,10 @@ class Browser(BaseTool):
             return await self._state(backend, brief=True)
         if action == "type":
             if index is None or text is None:
-                return ToolResult.fail("`index` and `text` are required")
+                return ToolResult.fail(
+                    '`index` and `text` are required, for example {"action": "type", '
+                    '"index": 2, "text": "London", "submit": true}'
+                )
             label = await self._label(backend, int(index))
             await backend.fill_element(int(index), text)
             if submit:
@@ -470,7 +479,9 @@ class Browser(BaseTool):
         self, backend: BrowserBackend, url: str | None, method: str | None, body: str | None
     ) -> ToolResult:
         if not url:
-            return ToolResult.fail("`url` is required")
+            return ToolResult.fail(
+                '`url` is required, for example {"action": "fetch", "url": "https://…"}'
+            )
         if not url.lower().startswith(("http://", "https://")):
             url = "https://" + url
         # the same guard as web_fetch: the browser's fetch must not reach the machine's own
