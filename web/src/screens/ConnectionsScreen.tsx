@@ -218,6 +218,9 @@ export function ModelCard({
   });
   // true once the user edits the model field by hand in this session: that value is never replaced
   const [typed, setTyped] = useState(false);
+  // the model field's free-text mode (Other model…) and the provider note's fold
+  const [typing, setTyping] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
 
   useEffect(() => {
     setModel(data.llm.model);
@@ -447,6 +450,15 @@ export function ModelCard({
     { key: "hands", label: handsProviderLabel, rows: handsOptions.map((id) => ({ id, name: id })), ...(handsPreset ? { default: handsPreset } : {}) },
     ...endpointGroups(endpoints, ep?.id ?? ""),
   ];
+  // the chat model picker: this provider's models, its catalogue default first
+  const modelGroups: ModelGroup[] = [
+    {
+      key: "models",
+      label: handsProviderLabel,
+      rows: models.list.map((id) => ({ id, name: id })),
+      ...(catalogueEntry?.defaults.chat ? { default: catalogueEntry.defaults.chat } : {}),
+    },
+  ];
   // the hands model picked from an endpoint that is the chat model's own stands in its group
   const handsGroup = guiEndpoint && guiEndpoint !== ep?.id ? endpointChoice(guiEndpoint) : "hands";
   const handsEndpoint = endpoints.find((e) => e.id === guiEndpoint) ?? null;
@@ -491,27 +503,30 @@ export function ModelCard({
                         type="button"
                         onClick={() => pick(id)}
                         className={cx(
-                          "rounded-2xl px-3 py-1.5 text-left border leading-tight",
+                          "flex items-start gap-1.5 rounded-2xl border px-3 py-2 text-left leading-tight transition-colors",
                           preset === id
                             ? "border-accent bg-accent/10 text-accent"
-                            : "border-border text-muted",
+                            : "border-border text-muted hover:bg-surface-2/60 hover:text-fg",
                         )}
                       >
-                        <span
-                          className={cx(
-                            "block text-[13px]",
-                            preset === id && "font-medium",
-                            id === ADD_ENDPOINT && "inline-flex items-center gap-1",
-                          )}
-                        >
-                          {id === ADD_ENDPOINT && <Plus size={13} />}
-                          {q.label}
-                        </span>
-                        {subtitle && (
-                          <span className="block text-[10.5px] opacity-80">
-                            {subtitle}
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={cx(
+                              "flex items-center gap-1 text-[13px]",
+                              preset === id && "font-medium",
+                              id === ADD_ENDPOINT && "inline-flex items-center gap-1",
+                            )}
+                          >
+                            {id === ADD_ENDPOINT && <Plus size={13} />}
+                            {q.label}
                           </span>
-                        )}
+                          {subtitle && (
+                            <span className="block truncate text-[10.5px] opacity-80">
+                              {subtitle}
+                            </span>
+                          )}
+                        </span>
+                        {preset === id && <Check size={14} className="mt-0.5 shrink-0" />}
                       </button>
                     );
                   })}
@@ -519,11 +534,20 @@ export function ModelCard({
               </div>
             ))}
           {catalogueEntry && (
-            <p className="text-[12px] text-muted">
-              <span className="font-medium text-fg">{providerName(catalogueEntry, locale)}</span> · {coversLine(t, catalogueEntry.capabilities)}
-              {". "}
-              {locale === "zh-CN" ? catalogueEntry.note_zh : catalogueEntry.note}
-            </p>
+            <div className="rounded-2xl bg-surface-2/60 px-3 py-2 text-[12px] leading-[18px] text-muted">
+              <p className={noteOpen ? "" : "line-clamp-2"}>
+                <span className="font-medium text-fg">{providerName(catalogueEntry, locale)}</span> · {coversLine(t, catalogueEntry.capabilities)}
+                {". "}
+                {locale === "zh-CN" ? catalogueEntry.note_zh : catalogueEntry.note}
+              </p>
+              <button
+                type="button"
+                onClick={() => setNoteOpen(!noteOpen)}
+                className="mt-0.5 text-[11.5px] font-medium text-accent"
+              >
+                {noteOpen ? t("Show less") : t("Show more")}
+              </button>
+            </div>
           )}
           <div>
             <button type="button" onClick={() => setChatgptOpen(!chatgptOpen)} className="inline-flex items-center gap-1.5 text-[12.5px] text-accent">
@@ -604,41 +628,44 @@ export function ModelCard({
                   : undefined
         }
       >
-        <input
-          list="dg-models"
-          value={model}
-          onChange={(e) => {
-            setModel(e.target.value);
-            setTyped(true);
-          }}
-          className={inputCls}
-          placeholder={t("model name")}
-          autoCapitalize="off"
-          autoCorrect="off"
-        />
-        <datalist id="dg-models">
-          {models.list.map((m) => (
-            <option key={m} value={m} />
-          ))}
-        </datalist>
-        {models.list.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {models.list.slice(0, 8).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setModel(m)}
-                className={cx(
-                  "rounded-full px-2.5 py-1 text-[12px] border",
-                  model === m
-                    ? "border-accent bg-accent/10 text-accent font-medium"
-                    : "border-border text-muted",
-                )}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
+        {typing || (!!model && !models.list.includes(model)) ? (
+          <>
+            <input
+              value={model}
+              onChange={(e) => {
+                setModel(e.target.value);
+                setTyped(true);
+              }}
+              className={inputCls}
+              placeholder={t("model name")}
+              autoCapitalize="off"
+              autoCorrect="off"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setTyping(false);
+                if (!models.list.includes(model)) setModel(models.list[0] ?? "");
+              }}
+              className="mt-1.5 text-[12px] text-accent"
+            >
+              {t("Choose from the list")}
+            </button>
+          </>
+        ) : (
+          <ModelPicker
+            label={t("Model")}
+            text={model ? `${handsProviderLabel} · ${model}` : t("Choose a model")}
+            groups={modelGroups}
+            current={model ? { group: "models", id: model } : undefined}
+            tail={t("Other model…")}
+            onPick={(_group, row) => {
+              setModel(row.id);
+              setTyped(true);
+              setTyping(false);
+            }}
+            onTail={() => setTyping(true)}
+          />
         )}
       </Field>
       )}
@@ -713,7 +740,7 @@ export function ModelCard({
           type="button"
           disabled={saving || !model.trim() || (needsUrl && !baseUrl.trim())}
           onClick={() => void save()}
-          className={primaryBtn}
+          className={cx(primaryBtn, "flex-1")}
         >
           {saving ? (
             <Loader2 size={16} className="animate-spin" />

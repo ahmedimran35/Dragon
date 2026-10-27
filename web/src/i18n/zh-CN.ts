@@ -240,6 +240,10 @@ const zhCN: Record<string, string> = {
   // ── Connections: the chat model card ──────────────────────────────────────────────
   "Three things make the chat work: a provider, a model and its key.": "让聊天跑起来需要三样：服务商、模型和密钥。",
   "More settings": "更多设置",
+  "Choose a model": "选择一个模型",
+  "Choose from the list": "从列表中选择",
+  "Show more": "展开",
+  "Show less": "收起",
 
   // ── The browser watching panel ────────────────────────────────────────────────────
   "Resize the panel": "调整面板宽度",
