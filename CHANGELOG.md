@@ -5,12 +5,13 @@ All notable changes to Dragon are recorded here. The format follows
 
 ## [Unreleased]
 
-- The chat model card under Connections is easier to get through: it opens with one line
-  on what is needed (a provider, a model, its key), then the provider, model and key with
-  Save and Test right there. The model field is a searchable picker (the provider's
-  models, its default first, folded and filtered) with "Other model…" for an id typed by
-  hand; the provider tiles show the choice with a tick and the provider's note folds to
-  two lines. The hands model, tool calling and proxy moved under a "More settings" fold.
+- The chat model card under Connections is easier to get through and better looking: it
+  opens with a readiness panel (a tick per thing already set: provider, model, key), then
+  the provider, model and key as titled sections with Save and Test right there. The model
+  field is a searchable picker (the provider's models, its default first, folded and
+  filtered) with "Other model…" for an id typed by hand; the provider tiles show the
+  choice with a tick and the provider's note folds to two lines. The hands model, tool
+  calling and proxy moved under a "More settings" fold.
 - The agent does its web work in the browser by itself: it opens a search engine or the
   site, searches, reads and works the page to the end, with the user watching live in the
   new panel. With the browser on, `web_search`/`web_fetch` are no longer offered to the

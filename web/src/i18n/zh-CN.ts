@@ -242,6 +242,9 @@ const zhCN: Record<string, string> = {
   "More settings": "更多设置",
   "Choose a model": "选择一个模型",
   "Choose from the list": "从列表中选择",
+  "saved in the vault": "已保存在保险库",
+  "set in the config": "在配置文件中设置",
+  "not set yet": "尚未设置",
   "Show more": "展开",
   "Show less": "收起",
 

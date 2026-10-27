@@ -3,6 +3,7 @@ import {
   BrainCircuit,
   CalendarDays,
   Check,
+  Circle,
   ChevronDown,
   ChevronUp,
   Clapperboard,
@@ -464,6 +465,24 @@ export function ModelCard({
   const handsEndpoint = endpoints.find((e) => e.id === guiEndpoint) ?? null;
   const handsText = guiModel ? `${handsGroup === "hands" ? handsProviderLabel : handsEndpoint ? endpointLabel(handsEndpoint) : ""} · ${guiModel}` : t("Automatic");
   const willAppendV1 = needsUrl && /^https?:\/\/[^/]+\/?$/.test(baseUrl.trim());
+  // the three things, as the readiness list at the top of the card shows them
+  const keyState =
+    data.llm.key_source === "vault"
+      ? t("saved in the vault")
+      : data.llm.key_source === "config"
+        ? t("set in the config")
+        : noKey && p?.key_optional
+          ? t("No key")
+          : t("not set yet");
+  const readiness: Array<{ on: boolean; label: string; value: string }> = [
+    { on: !!handsProviderLabel, label: t("Provider"), value: handsProviderLabel || t("not set yet") },
+    { on: !!model.trim(), label: t("Model"), value: model.trim() || t("not set yet") },
+    {
+      on: data.llm.key_source !== "none" || (noKey && !!p?.key_optional),
+      label: t("API key"),
+      value: keyState,
+    },
+  ];
 
   return (
     <Card
@@ -478,10 +497,27 @@ export function ModelCard({
       open={open}
       onToggle={compact ? undefined : () => setOpen(!open)}
     >
-      <p className="mb-1 text-[12.5px] text-muted">
-        {t("Three things make the chat work: a provider, a model and its key.")}
-      </p>
-      <Field label={t("Provider")}>
+      <div className="rounded-2xl border border-accent/25 bg-accent/[0.07] px-3.5 py-3">
+        <p className="text-[12.5px] font-medium text-fg">
+          {t("Three things make the chat work: a provider, a model and its key.")}
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {readiness.map((r) => (
+            <li key={r.label} className="flex items-center gap-2 text-[12.5px]">
+              {r.on ? (
+                <Check size={14} className="shrink-0 text-accent" />
+              ) : (
+                <Circle size={14} className="shrink-0 text-muted/50" />
+              )}
+              <span className="text-muted">{r.label}</span>
+              <span className={cx("min-w-0 flex-1 truncate", r.on ? "text-fg" : "text-muted")}>
+                {r.value}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <Field label={t("Provider")} strong>
         <div className="space-y-2.5">
           {groups
             .filter((g) => g.ids.length)
@@ -614,6 +650,7 @@ export function ModelCard({
       {!adding && (
       <Field
         label={t("Model")}
+        strong
         hint={
           models.source === "live"
             ? t("{n} models from the endpoint", { n: models.list.length })
@@ -672,6 +709,7 @@ export function ModelCard({
       {!p?.no_key && !adding && (
         <Field
           label={t("API key")}
+          strong
           hint={
             noKey && p?.key_optional
               ? t("No key will be sent.")
@@ -681,13 +719,14 @@ export function ModelCard({
           }
         >
           <div className="relative">
+            <KeyRound size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type={showKey ? "text" : "password"}
               value={key}
               onChange={(e) => setKey(e.target.value)}
               disabled={noKey && !!p?.key_optional}
               aria-label={t("API key")}
-              className={cx(inputCls, "pr-10 disabled:opacity-50")}
+              className={cx(inputCls, "pl-9 pr-10 disabled:opacity-50")}
               placeholder={
                 data.llm.key_source === "vault" && preset === currentPreset
                   ? "••••••••"
@@ -3642,10 +3681,13 @@ function wireControl(
 function Field({
   label,
   hint,
+  strong,
   children,
 }: {
   label: string;
   hint?: string;
+  /** The card's main fields: a label that reads as a section title. */
+  strong?: boolean;
   children: ReactNode;
 }) {
   const id = useId();
@@ -3654,7 +3696,11 @@ function Field({
   const wired = wireControl(children, id, hintId);
   return (
     <div>
-      <label id={labelId} htmlFor={wired?.id} className="text-[12px] text-muted">
+      <label
+        id={labelId}
+        htmlFor={wired?.id}
+        className={strong ? "text-[13px] font-semibold text-fg" : "text-[12px] text-muted"}
+      >
         {label}
       </label>
       <div
