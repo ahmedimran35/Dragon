@@ -131,7 +131,8 @@ class WebSearch(BaseTool):
     name: str = "web_search"
     description: str = (
         "Search the web. Returns titles, URLs and snippets. Use `web_fetch` to read a result in "
-        "full."
+        "full. When the job is to work on a website (search anything and dig through its results, "
+        "compare options, fill a form, sign in, buy or book), use the `browser` tool instead."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -183,7 +184,9 @@ class WebFetch(BaseTool):
     description: str = (
         "Fetch a public web page or API (HTTP GET only) and return its readable content as "
         "markdown/text (HTML is converted, JSON is pretty-printed). Use for reading articles, docs, "
-        "prices, schedules."
+        "prices, schedules. When the job is to work the page rather than read it (search anything "
+        "and dig through its results, compare options, fill a form, sign in, buy or book), use the "
+        "`browser` tool instead."
     )
     parameters: dict[str, Any] = {
         "type": "object",

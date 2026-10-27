@@ -2416,11 +2416,15 @@ def _chromium_available() -> bool:
 
 
 @pytest.mark.skipif(not _chromium_available(), reason="playwright + chromium not installed")
-async def test_browser_tool_reports_frames_and_user_takeover(tmp_path):
+async def test_browser_tool_reports_frames_and_user_takeover(tmp_path, monkeypatch):
     import http.server
     import threading
 
     from dragon.tools.browser import Browser, BrowserFrame
+
+    # the fixture server is on loopback: let the tool reach it (the SSRF guard has its
+    # own test in tests/test_browser.py)
+    monkeypatch.setattr("dragon.tools.browser._is_private_host", lambda host: False)
 
     html = (
         b"<title>Login</title><h1>Sign in</h1><input id=u placeholder=User>"

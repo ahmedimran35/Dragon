@@ -109,6 +109,10 @@ def playwright_available() -> bool:
 class Browser(BaseTool):
     name: str = "browser"
     description: str = (
+        "Prefer this over `web_search`/`web_fetch` whenever the task happens on a website rather "
+        "than about one (searching anything and working through the results, comparing options, "
+        "reading a map or a listing, filling a form, signing in, buying or booking): it drives the "
+        "real page step by step and the user watches it live. "
         "Control a real web browser to complete tasks on websites (search, read, fill forms, click). "
         "Actions: `navigate` (url), `extract` (read current page + numbered interactive elements), "
         "`click` (index), `type` (index, text, submit=true to press Enter), `press` (key, e.g. 'Enter'), "
