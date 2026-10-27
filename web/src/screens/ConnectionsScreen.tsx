@@ -142,6 +142,7 @@ export function ModelCard({
   const { toast } = useStore();
   const t = useT();
   const [open, setOpen] = useState(!!compact);
+  const [more, setMore] = useState(false);
   const presets = data.providers;
   // the custom endpoints of the runtime's list (#294); a runtime without one offers the single
   // "custom" slot as before
@@ -465,6 +466,9 @@ export function ModelCard({
       open={open}
       onToggle={compact ? undefined : () => setOpen(!open)}
     >
+      <p className="mb-1 text-[12.5px] text-muted">
+        {t("Three things make the chat work: a provider, a model and its key.")}
+      </p>
       <Field label={t("Provider")}>
         <div className="space-y-2.5">
           {groups
@@ -585,7 +589,7 @@ export function ModelCard({
       )}
       {!adding && (
       <Field
-        label={t("Chat model")}
+        label={t("Model")}
         hint={
           models.source === "live"
             ? t("{n} models from the endpoint", { n: models.list.length })
@@ -634,44 +638,6 @@ export function ModelCard({
                 {m}
               </button>
             ))}
-          </div>
-        )}
-      </Field>
-      )}
-      {!adding && (
-      <Field
-        label={t("Hands model")}
-        hint={
-          endpoints.length > (ep ? 1 : 0)
-            ? t("The model that looks at screens when the hands run: a small, fast one that takes pictures. Pick one of this provider's, or one from another endpoint of your list, which then lends its address and key.")
-            : t("The model that looks at screens when the hands run: a small, fast one that takes pictures, on the same endpoint and key. Default: this provider's own hands model.")
-        }
-      >
-        <ModelPicker
-          label={t("Hands model")}
-          text={handsText}
-          heads={[{ value: "", label: t("Automatic") }]}
-          headValue={guiModel ? undefined : ""}
-          groups={handsGroups}
-          current={guiModel ? { group: handsGroup, id: guiModel } : undefined}
-          onHead={() => {
-            setGuiModel("");
-            setGuiEndpoint("");
-          }}
-          onPick={(group, row) => {
-            setGuiModel(row.id);
-            setGuiEndpoint(endpointOf(group) ?? "");
-          }}
-        />
-        {handsNow && <p className="mt-1.5 text-[12px] text-muted">{t("Currently {value}", { value: handsNow })}</p>}
-        {model.trim() && !guiModel && modelSees(model.trim()) === false && (
-          <div className="mt-1.5 text-[12px] text-amber-700 dark:text-amber-300">
-            {t("{model} does not take pictures, so the hands would be blind with it. Pick a model that sees for them.", { model: model.trim() })}
-          </div>
-        )}
-        {lacks("vision") && (
-          <div className="mt-1.5 text-[12px] text-amber-700 dark:text-amber-300">
-            {unavailableLine(t, "vision", region, locale)} <OwnKeyHow />
           </div>
         )}
       </Field>
@@ -742,6 +708,95 @@ export function ModelCard({
         </Field>
       )}
       {!adding && (
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          disabled={saving || !model.trim() || (needsUrl && !baseUrl.trim())}
+          onClick={() => void save()}
+          className={primaryBtn}
+        >
+          {saving ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Check size={16} />
+          )}{" "}
+          {t("Save")}
+        </button>
+        <button
+          type="button"
+          disabled={testing}
+          onClick={() => void runTest()}
+          className={secondaryBtn}
+        >
+          {testing ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Plug size={16} />
+          )}{" "}
+          {t("Test")}
+        </button>
+      </div>
+      )}
+      {test && (
+        <TestLine
+          result={test}
+          okText={t('Replied "{reply}" in {ms} ms', {
+            reply: test.reply ?? "",
+            ms: test.ms ?? 0,
+          })}
+        />
+      )}
+      {!adding && (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setMore(!more)}
+            aria-expanded={more}
+            className="inline-flex items-center gap-1.5 text-[12.5px] text-accent"
+          >
+            {t("More settings")} {more ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+          {more && (
+            <div className="mt-2 space-y-3">
+      {!adding && (
+      <Field
+        label={t("Hands model")}
+        hint={
+          endpoints.length > (ep ? 1 : 0)
+            ? t("The model that looks at screens when the hands run: a small, fast one that takes pictures. Pick one of this provider's, or one from another endpoint of your list, which then lends its address and key.")
+            : t("The model that looks at screens when the hands run: a small, fast one that takes pictures, on the same endpoint and key. Default: this provider's own hands model.")
+        }
+      >
+        <ModelPicker
+          label={t("Hands model")}
+          text={handsText}
+          heads={[{ value: "", label: t("Automatic") }]}
+          headValue={guiModel ? undefined : ""}
+          groups={handsGroups}
+          current={guiModel ? { group: handsGroup, id: guiModel } : undefined}
+          onHead={() => {
+            setGuiModel("");
+            setGuiEndpoint("");
+          }}
+          onPick={(group, row) => {
+            setGuiModel(row.id);
+            setGuiEndpoint(endpointOf(group) ?? "");
+          }}
+        />
+        {handsNow && <p className="mt-1.5 text-[12px] text-muted">{t("Currently {value}", { value: handsNow })}</p>}
+        {model.trim() && !guiModel && modelSees(model.trim()) === false && (
+          <div className="mt-1.5 text-[12px] text-amber-700 dark:text-amber-300">
+            {t("{model} does not take pictures, so the hands would be blind with it. Pick a model that sees for them.", { model: model.trim() })}
+          </div>
+        )}
+        {lacks("vision") && (
+          <div className="mt-1.5 text-[12px] text-amber-700 dark:text-amber-300">
+            {unavailableLine(t, "vision", region, locale)} <OwnKeyHow />
+          </div>
+        )}
+      </Field>
+      )}
+      {!adding && (
       <Field
         label={t("Tool calling")}
         hint={t(
@@ -789,44 +844,9 @@ export function ModelCard({
           />
         </Field>
       )}
-      {!adding && (
-      <div className="flex gap-2 pt-1">
-        <button
-          type="button"
-          disabled={saving || !model.trim() || (needsUrl && !baseUrl.trim())}
-          onClick={() => void save()}
-          className={primaryBtn}
-        >
-          {saving ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Check size={16} />
-          )}{" "}
-          {t("Save")}
-        </button>
-        <button
-          type="button"
-          disabled={testing}
-          onClick={() => void runTest()}
-          className={secondaryBtn}
-        >
-          {testing ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Plug size={16} />
-          )}{" "}
-          {t("Test")}
-        </button>
-      </div>
-      )}
-      {test && (
-        <TestLine
-          result={test}
-          okText={t('Replied "{reply}" in {ms} ms', {
-            reply: test.reply ?? "",
-            ms: test.ms ?? 0,
-          })}
-        />
+            </div>
+          )}
+        </div>
       )}
     </Card>
   );

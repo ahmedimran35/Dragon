@@ -237,6 +237,10 @@ const zhCN: Record<string, string> = {
   reopened: "已重新打开",
   finished: "已结束",
 
+  // ── Connections: the chat model card ──────────────────────────────────────────────
+  "Three things make the chat work: a provider, a model and its key.": "让聊天跑起来需要三样：服务商、模型和密钥。",
+  "More settings": "更多设置",
+
   // ── The browser watching panel ────────────────────────────────────────────────────
   "Resize the panel": "调整面板宽度",
   "The browser is quiet.": "浏览器现在很安静。",
