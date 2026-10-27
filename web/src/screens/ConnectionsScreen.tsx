@@ -497,7 +497,7 @@ export function ModelCard({
       open={open}
       onToggle={compact ? undefined : () => setOpen(!open)}
     >
-      <div className="rounded-2xl border border-accent/25 bg-accent/[0.07] px-3.5 py-3">
+      <div className="rounded-3xl border border-accent/20 bg-accent/[0.06] px-4 py-3.5">
         <p className="text-[12.5px] font-medium text-fg">
           {t("Three things make the chat work: a provider, a model and its key.")}
         </p>
@@ -539,10 +539,10 @@ export function ModelCard({
                         type="button"
                         onClick={() => pick(id)}
                         className={cx(
-                          "flex items-start gap-1.5 rounded-2xl border px-3 py-2 text-left leading-tight transition-colors",
+                          "flex items-start gap-1.5 rounded-3xl border px-3.5 py-2.5 text-left leading-tight transition-all",
                           preset === id
-                            ? "border-accent bg-accent/10 text-accent"
-                            : "border-border text-muted hover:bg-surface-2/60 hover:text-fg",
+                            ? "border-accent/50 bg-accent/10 text-accent shadow-sm"
+                            : "border-border/60 bg-surface-2/40 text-muted hover:bg-surface-2/70 hover:text-fg",
                         )}
                       >
                         <span className="min-w-0 flex-1">
@@ -570,7 +570,7 @@ export function ModelCard({
               </div>
             ))}
           {catalogueEntry && (
-            <div className="rounded-2xl bg-surface-2/60 px-3 py-2 text-[12px] leading-[18px] text-muted">
+            <div className="rounded-3xl bg-surface-2/50 px-3.5 py-2.5 text-[12px] leading-[18px] text-muted">
               <p className={noteOpen ? "" : "line-clamp-2"}>
                 <span className="font-medium text-fg">{providerName(catalogueEntry, locale)}</span> · {coversLine(t, catalogueEntry.capabilities)}
                 {". "}

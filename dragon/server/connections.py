@@ -76,7 +76,7 @@ EMAIL_PASSWORD = "EMAIL_PASSWORD"
 PROVIDERS: dict[str, dict[str, Any]] = {
     "deepseek": {
         "label": "DeepSeek",
-        "subtitle": "深度求索",
+        "subtitle": "DeepSeek's own API",
         "group": "openai",
         "provider": "openai",
         "base_url": "https://api.deepseek.com",
@@ -86,7 +86,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     },
     "kimi": {
         "label": "Kimi",
-        "subtitle": "Moonshot AI · 月之暗面",
+        "subtitle": "Moonshot AI",
         "group": "openai",
         "provider": "openai",
         "base_url": "https://api.moonshot.cn/v1",
@@ -96,7 +96,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     },
     "qwen": {
         "label": "Alibaba Cloud Bailian",
-        "subtitle": "阿里云百炼 · DashScope · DeepSeek and Qwen, one key",
+        "subtitle": "DashScope · DeepSeek and Qwen, one key",
         "group": "openai",
         "provider": "openai",
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -109,7 +109,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     },
     "glm": {
         "label": "GLM",
-        "subtitle": "智谱 AI",
+        "subtitle": "Zhipu AI",
         "group": "openai",
         "provider": "openai",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -118,8 +118,8 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "key_hint": "xxxxxxxx.xxxxxxxx",
     },
     "doubao": {
-        "label": "豆包",
-        "subtitle": "火山方舟 · Volcengine Ark",
+        "label": "Doubao",
+        "subtitle": "Volcengine Ark",
         "group": "openai",
         "provider": "openai",
         "base_url": "https://ark.cn-beijing.volces.com/api/v3",
@@ -130,7 +130,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     },
     "minimax": {
         "label": "MiniMax",
-        "subtitle": "MiniMax · 稀宇科技",
+        "subtitle": "MiniMax's own API",
         "group": "openai",
         "provider": "openai",
         "base_url": "https://api.minimaxi.com/v1",

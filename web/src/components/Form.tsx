@@ -76,11 +76,11 @@ export function Card({
 }
 
 export const inputCls =
-  "w-full rounded-2xl bg-surface-2 px-3.5 py-2.5 text-[14.5px] outline-none focus:ring-2 focus:ring-accent/40";
+  "w-full rounded-3xl bg-surface-2 px-3.5 py-2.5 text-[14.5px] outline-none focus:ring-2 focus:ring-accent/40";
 export const primaryBtn =
-  "flex items-center justify-center gap-1.5 rounded-2xl bg-accent text-accent-fg px-4 py-2.5 text-[14px] font-medium disabled:opacity-40";
+  "flex items-center justify-center gap-1.5 rounded-3xl bg-accent text-accent-fg px-4 py-2.5 text-[14px] font-medium disabled:opacity-40";
 export const secondaryBtn =
-  "flex items-center justify-center gap-1.5 rounded-2xl border border-border px-4 py-2.5 text-[14px] font-medium text-muted disabled:opacity-40";
+  "flex items-center justify-center gap-1.5 rounded-3xl border border-border px-4 py-2.5 text-[14px] font-medium text-muted disabled:opacity-40";
 
 /** A labelled switch with an optional hint under the label. */
 export function Toggle({

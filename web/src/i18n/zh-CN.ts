@@ -245,6 +245,13 @@ const zhCN: Record<string, string> = {
   "saved in the vault": "已保存在保险库",
   "set in the config": "在配置文件中设置",
   "not set yet": "尚未设置",
+  // the provider tiles' subtitles (dragon/server/connections.py), as the Chinese UI says them
+  "DeepSeek's own API": "深度求索",
+  "Moonshot AI": "月之暗面",
+  "DashScope · DeepSeek and Qwen, one key": "阿里云百炼 · DashScope · DeepSeek 和 Qwen，一个密钥",
+  "Zhipu AI": "智谱 AI",
+  "Volcengine Ark": "火山方舟",
+  "MiniMax's own API": "MiniMax 稀宇科技",
   "Show more": "展开",
   "Show less": "收起",
 

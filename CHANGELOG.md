@@ -11,7 +11,9 @@ All notable changes to Dragon are recorded here. The format follows
   field is a searchable picker (the provider's models, its default first, folded and
   filtered) with "Other model…" for an id typed by hand; the provider tiles show the
   choice with a tick and the provider's note folds to two lines. The hands model, tool
-  calling and proxy moved under a "More settings" fold.
+  calling and proxy moved under a "More settings" fold. The provider tiles say their names
+  in English only (the Chinese UI keeps the Chinese through the dictionary), and the
+  form's boxes are rounder and softer throughout.
 - The agent does its web work in the browser by itself: it opens a search engine or the
   site, searches, reads and works the page to the end, with the user watching live in the
   new panel. With the browser on, `web_search`/`web_fetch` are no longer offered to the
