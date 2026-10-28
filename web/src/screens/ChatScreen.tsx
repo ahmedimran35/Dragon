@@ -1,10 +1,11 @@
 import { ArrowUp, ChevronDown, FileText, Loader2, Menu, MessageSquarePlus, Moon, Plus, Square, Table2, Trash2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api, fileUrl } from "../api";
-import { botForThread, defaultBot } from "../bots";
+import { botForThread, isChief } from "../bots";
+import { Avatar } from "../components/Avatar";
 import { AvatarOptionsCard } from "../components/AvatarOptionsCard";
-import { BotPicker } from "../components/BotPicker";
 import { BrowserViewer } from "../components/BrowserViewer";
+import { ChiefBadge } from "../components/ChiefBadge";
 import { MicButton, useDictation } from "../components/Dictation";
 import { ApprovalCard, ArtifactCard, BrowserCard, HandsCard, HoldCard, Notice, QuestionCard, ToolChip } from "../components/Cards";
 import { IntroLines, NamingCard } from "../components/FirstConversation";
@@ -35,6 +36,8 @@ export function ChatScreen() {
   // who this chat is with: the thread's own bot, falling back to the default bot
   const bot = botForThread(state.bots, thread, profile);
   const name = bot.name || "Dragon";
+  // the chief-of-staff mark goes under the name tag only when this chat speaks as the chief
+  const chief = isChief(bot);
 
   const listRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -145,6 +148,23 @@ export function ChatScreen() {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
+  // the chips under the name tag: the chief-of-staff mark, and a side chat's title when it
+  // says more than the name tag already does
+  const under = useMemo(() => {
+    const titled = !!thread && thread.id !== "main" && thread.title !== name;
+    if (!chief && !titled) return undefined;
+    return (
+      <>
+        {chief && <ChiefBadge />}
+        {titled && (
+          <span className={cx("truncate rounded-full bg-surface-2 px-2.5 py-0.5 text-[11.5px] font-medium text-fg/80", chief && "ml-1.5")}>
+            {thread?.title}
+          </span>
+        )}
+      </>
+    );
+  }, [chief, thread, name]);
+
   const queued = state.pendingApprovals.length;
   const waitingHere = state.pendingApprovals.filter((a) => a.thread === activeThread).length;
   // The status under the name is about this chat; other chats show on the avatar badge.
@@ -194,11 +214,7 @@ export function ChatScreen() {
             </DragonRoundButton>
           }
           trailing={<MoreMenu actions={[{ label: t("Coding agents"), onClick: () => setTab("coding") }]} />}
-          under={
-            thread && thread.id !== "main" ? (
-              <span className="truncate rounded-full bg-surface-2 px-2.5 py-0.5 text-[11.5px] font-medium text-fg/80">{thread.title}</span>
-            ) : undefined
-          }
+          under={under}
         />
       </div>
       {/* while reading older messages the top edge fades fully into the canvas, under the header */}
@@ -894,15 +910,13 @@ export function ThreadList({
   const t = useT();
   const [title, setTitle] = useState("");
   const [creating, setCreating] = useState(false);
-  // which bot the new chat is with: the chosen one, else the default bot
-  const [pickedBot, setPickedBot] = useState("");
-  const botId = pickedBot || defaultBot(state.bots, state.profile).id;
   const newInput = useRef<HTMLInputElement>(null);
 
+  // a new chat is always with the chief: the staff bots are reached from the roster instead
   const create = async () => {
     setCreating(true);
     try {
-      const created = await api.createThread(title.trim() || t("Side chat"), botId);
+      const created = await api.createThread(title.trim() || t("Side chat"));
       dispatch({ type: "ws", msg: { kind: "thread", thread: created } });
       setTitle("");
       onPick(created.id);
@@ -934,18 +948,35 @@ export function ThreadList({
     }
   };
 
-  const row = (th: ThreadMeta) => (
+  // a staff bot's chat is the one chat it owns: the row carries the bot's face and name
+  const staffOf = (th: ThreadMeta) => {
+    const bot = th.bot_id ? state.bots.find((b) => b.id === th.bot_id) : undefined;
+    return bot && !isChief(bot) ? bot : null;
+  };
+
+  const row = (th: ThreadMeta) => {
+    const staff = staffOf(th);
+    const title = th.id === "main" ? t(th.title) : th.title;
+    return (
           <li key={th.id} className={cx("group flex items-center gap-2 px-3", compact ? "py-2 rounded-xl hover:bg-surface-2/60" : "py-2.5", th.id === active && "bg-surface-2/60")}>
-            <button type="button" onClick={() => onPick(th.id)} className="flex-1 text-left min-w-0">
-              <div className={cx("font-medium truncate flex items-center gap-2", compact ? "text-[13.5px]" : "text-[15px]")}>
-                <span className="truncate">{th.id === "main" ? t(th.title) : th.title}</span>
-                {th.busy && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />}
-              </div>
-              <div className={cx("text-muted", compact ? "text-[11.5px]" : "text-[12px]")}>
-                {t("{n} events", { n: th.events })}{th.queued ? ` · ${t("{n} queued", { n: th.queued })}` : ""} · {timeShort(th.updated_at)}
-              </div>
+            <button type="button" onClick={() => onPick(th.id)} className="flex flex-1 items-center gap-1.5 text-left min-w-0">
+              {staff && <Avatar profile={staff} size={compact ? 20 : 24} still />}
+              <span className="min-w-0 flex-1">
+                <span className={cx("font-medium truncate flex items-center gap-2", compact ? "text-[13.5px]" : "text-[15px]")}>
+                  <span className="truncate">{title}</span>
+                  {staff && staff.name !== title && (
+                    <span className="max-w-[90px] shrink-0 truncate rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                      {staff.name}
+                    </span>
+                  )}
+                  {th.busy && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />}
+                </span>
+                <span className={cx("block text-muted", compact ? "text-[11.5px]" : "text-[12px]")}>
+                  {t("{n} events", { n: th.events })}{th.queued ? ` · ${t("{n} queued", { n: th.queued })}` : ""} · {timeShort(th.updated_at)}
+                </span>
+              </span>
             </button>
-            <button type="button" aria-label={t("Clear")} onClick={() => void clear(th.id)} className={cx("p-2 text-muted hover:text-fg", compact && "opacity-0 group-hover:opacity-100 focus:opacity-100")}>
+            <button type="button" aria-label={t("Clear")} onClick={() => void clear(th.id)} className={cx("text-muted hover:text-fg", compact ? "p-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100" : "p-2")}>
               <X size={16} />
             </button>
             {th.id !== "main" && (
@@ -953,13 +984,14 @@ export function ThreadList({
                 type="button"
                 aria-label={t("Delete")}
                 onClick={() => void remove(th.id)}
-                className={cx("p-2 text-muted hover:text-rose-500", compact && "opacity-0 group-hover:opacity-100 focus:opacity-100")}
+                className={cx("text-muted hover:text-rose-500", compact ? "p-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100" : "p-2")}
               >
                 <Trash2 size={16} />
               </button>
             )}
           </li>
-  );
+    );
+  };
   const listCls = cx("divide-y divide-border overflow-hidden", compact ? "rounded-xl" : "rounded-2xl border border-border");
   const heading = "px-3 pb-1 pt-3 text-[11.5px] font-semibold uppercase tracking-wide text-muted";
 
@@ -986,7 +1018,6 @@ export function ThreadList({
       ) : (
         <ul className={listCls}>{threads.map(row)}</ul>
       )}
-      <BotPicker bots={state.bots} value={botId} onChange={setPickedBot} />
       <div className={cx("flex gap-2", compact ? "mt-3" : "mt-4")}>
         <input
           ref={newInput}

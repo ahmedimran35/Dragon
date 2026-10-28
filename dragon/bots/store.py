@@ -4,6 +4,7 @@ A bot is a JSON object (the shape the API and the web app exchange):
 
     {
         "id": "b_1a2b3c4d",        # "b_" + 8 lowercase hex, except the default bot: "default"
+        "role": "staff",           # "chief" for the default bot, "staff" for every other one
         "name": "Ember",
         "avatar": "dragon",        # "dragon", a studio face id, or "" (the emoji)
         "emoji": "",
@@ -20,6 +21,10 @@ A bot is a JSON object (the shape the API and the web app exchange):
 The default bot (``id == "default"``) always exists: it is the bot every thread speaks
 as unless the thread names another one. On a first load it is seeded from the persona in
 ``profile.json`` (see ``DragonService``), so an existing install keeps its identity.
+``role`` is server-owned: it is derived from the id — the default bot is the user's chief
+of staff, every other bot is on its staff — and never read from the data, so a request
+that sends a role cannot promote a bot or demote the chief. Files written before the role
+existed load fine and are rewritten in the new shape.
 Writes go through a temporary file and ``os.replace``, the pattern the session files use.
 """
 
@@ -38,6 +43,11 @@ from dragon.prompts import COMMUNICATION, TONES
 
 DEFAULT_BOT_ID = "default"
 DEFAULT_BOT_NAME = "Ember"
+# roles: the default bot is the user's chief of staff, every other bot is on its staff.
+# Derived from the id, never taken from the data (see normalize).
+ROLE_CHIEF = "chief"
+ROLE_STAFF = "staff"
+ROLES = (ROLE_CHIEF, ROLE_STAFF)
 # identity limits, the same ones the profile keeps (the app's forms share them)
 NAME_MAX = 20
 TAGLINE_MAX = 60
@@ -45,7 +55,8 @@ STYLE_MAX = 1000
 INSTRUCTIONS_MAX = 4000
 MODEL_MAX = 200
 BOT_ID_RE = re.compile(r"b_[0-9a-f]{8}")
-# the fields a bot owns; everything else in the data is ignored
+# the fields a bot owns; everything else in the data is ignored. ``role`` is among them
+# but server-owned: it is written from the id, never from what a caller sends.
 BOT_FIELDS = (
     "name",
     "avatar",
@@ -57,11 +68,18 @@ BOT_FIELDS = (
     "style",
     "instructions",
     "model",
+    "role",
 )
 
 
 def new_bot_id() -> str:
     return "b_" + uuid.uuid4().hex[:8]
+
+
+def role_of(bot_id: str) -> str:
+    """A bot's role from its id: the chief of staff for the default bot, staff otherwise.
+    This is the only place a role comes from, so only "chief" and "staff" ever exist."""
+    return ROLE_CHIEF if str(bot_id or "") == DEFAULT_BOT_ID else ROLE_STAFF
 
 
 def _clean_name(value: Any, required: bool) -> str:
@@ -92,11 +110,15 @@ def normalize(
 ) -> dict[str, Any]:
     """One bot JSON object, validated and trimmed. Unknown fields are ignored.
 
-    ``name`` is required for a new bot; ``tone`` must be a key of ``TONES`` (or "");
-    ``communication`` likewise. Raises :class:`ValueError` when a value cannot be kept.
+    ``role`` is server-owned: it comes from ``bot_id`` ("chief" for the default bot,
+    "staff" for every other one) and is never read from ``data`` — a request that sends
+    one is ignored. ``name`` is required for a new bot; ``tone`` must be a key of ``TONES``
+    (or ""); ``communication`` likewise. Raises :class:`ValueError` when a value cannot
+    be kept.
     """
     bot: dict[str, Any] = {
         "id": bot_id,
+        "role": role_of(bot_id),
         "name": _clean_name(data.get("name"), require_name),
         "avatar": _clean_avatar(data.get("avatar")),
         "emoji": _clean_text(data.get("emoji"), 8),
@@ -118,7 +140,7 @@ class BotStore:
     def __init__(self, path: Path | str, seed: dict[str, Any] | None = None):
         self.path = Path(path)
         self._bots: dict[str, dict[str, Any]] = {}
-        self._load()
+        rewrite = self._load()
         if DEFAULT_BOT_ID not in self._bots:
             # a first load (or a file that lost its default bot): the persona comes from
             # ``seed`` — the profile's identity fields — else from the built-in defaults
@@ -128,17 +150,22 @@ class BotStore:
                 base["name"] = DEFAULT_BOT_NAME
             self._bots[DEFAULT_BOT_ID] = normalize(base, require_name=True, bot_id=DEFAULT_BOT_ID)
             self._bots[DEFAULT_BOT_ID]["created_at"] = int(time.time())
+            rewrite = True
+        if rewrite:
             self._save()
 
     # ------------------------------------------------------------------ persistence
-    def _load(self) -> None:
+    def _load(self) -> bool:
+        """Read the file into ``self._bots``; ``True`` when it should be rewritten (an
+        entry without a role, or one whose role the id contradicts)."""
         if not self.path.exists():
-            return
+            return False
         try:
             data = json.loads(self.path.read_text("utf-8"))
         except (OSError, json.JSONDecodeError):
-            return
+            return False
         entries = data.get("bots", []) if isinstance(data, dict) else []
+        rewrite = False
         for item in entries:
             if not isinstance(item, dict):
                 continue
@@ -150,7 +177,11 @@ class BotStore:
             except ValueError:
                 continue
             bot["created_at"] = int(item.get("created_at") or 0) or int(time.time())
+            # a file from before roles existed, or one that disagrees with the id: the
+            # id is authoritative and the file is rewritten in the new shape
+            rewrite = rewrite or item.get("role") != bot["role"]
             self._bots[bot_id] = bot
+        return rewrite
 
     def _save(self) -> None:
         """Write the file atomically: a temporary file beside it, then ``os.replace``."""
@@ -199,8 +230,9 @@ class BotStore:
 
     # ------------------------------------------------------------------ mutations
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
-        """A new bot with an id of its own; ``name`` is required. A client-supplied id is
-        ignored — the store mints ids so they cannot collide or impersonate."""
+        """A new bot with an id of its own; ``name`` is required, and it joins the staff
+        (``role`` is always "staff" — the chief is the default bot). A client-supplied id
+        is ignored — the store mints ids so they cannot collide or impersonate."""
         bot = normalize(data, require_name=True, bot_id="")
         while not bot["id"]:
             candidate = new_bot_id()
@@ -213,12 +245,15 @@ class BotStore:
 
     def update(self, bot_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Merge ``data`` into one bot (:class:`KeyError` for an unknown id). Only the
-        fields present change; ``id``, ``created_at`` and unknown fields are ignored."""
+        fields present change; ``id``, ``created_at``, ``role`` (server-owned) and unknown
+        fields are ignored."""
         bot = self._bots.get(str(bot_id or ""))
         if bot is None:
             raise KeyError(bot_id)
         changes: dict[str, Any] = {}
         for key in BOT_FIELDS:
+            if key == "role":
+                continue  # server-owned: a caller never sets it
             if key in data and data[key] is not None:
                 changes[key] = data[key]
         if "name" in changes:
@@ -249,7 +284,11 @@ __all__ = [
     "BOT_ID_RE",
     "DEFAULT_BOT_ID",
     "DEFAULT_BOT_NAME",
+    "ROLES",
+    "ROLE_CHIEF",
+    "ROLE_STAFF",
     "BotStore",
     "new_bot_id",
     "normalize",
+    "role_of",
 ]

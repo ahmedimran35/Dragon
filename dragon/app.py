@@ -6,6 +6,7 @@ import contextlib
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from dragon import prompts
 from dragon.agent import DragonAgent
@@ -50,10 +51,14 @@ from dragon.tools import (
     WebSearch,
     playwright_available,
 )
+from dragon.tools.bots_tool import Bots
 from dragon.tools.computer import ComputerAct, ComputerScreen, ComputerTask
 from dragon.triggers import TriggerStore
 from dragon.ui import UI
 from dragon.vault import CredentialVault
+
+if TYPE_CHECKING:
+    from dragon.server.service import DragonService
 
 
 class DragonApp:
@@ -66,6 +71,9 @@ class DragonApp:
     ):
         self.settings = settings
         self.ui = ui
+        # the live DragonService, which points this at itself at construction (the roster
+        # tool reaches its bot methods through here); None in a runtime without one
+        self.service: DragonService | None = None
         setup_logging(settings.log_level, settings.data_dir / "logs")
         settings.ensure_dirs()
         self.session_id = (
@@ -268,6 +276,9 @@ class DragonApp:
             Goals(store=self.goals),
             Reminders(store=self.reminders),
             Triggers(store=self.triggers, available=self.trigger_kinds),
+            # the roster is in every bot's collection on purpose: the tool's own runtime
+            # check ("the chief of staff only") is the boundary
+            Bots(service=lambda: self.service),
         )
         if self.memory is not None:
             tools.add(

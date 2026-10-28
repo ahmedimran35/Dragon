@@ -2,7 +2,11 @@
 
     GET  /api/state                      snapshot: profile, bots, status, threads, goals, settings
     GET  /api/bots  POST /api/bots  PATCH|DELETE /api/bots/{id}   the personas a chat speaks as
+                                          (every bot's JSON carries `role`, server-owned: "chief" for the
+                                           default bot, "staff" for the rest — a request's `role` is ignored)
     GET  /api/threads                    list threads          POST /api/threads {title,bot_id}
+                                          (a new chat as that bot; a staff bot's id returns its one
+                                           existing chat — never a second one)
     GET  /api/threads/{id}/events        timeline (?limit&before)
     POST /api/threads/{id}/send {text}   queue a message (non-blocking)
     POST /api/approvals/{id} {approved, scope, reason}
@@ -112,13 +116,16 @@ class SendBody(BaseModel):
 
 class ThreadBody(BaseModel):
     title: str = ""
-    # the bot a new chat speaks as (POST /api/threads); the default bot when empty
+    # the bot a new chat speaks as (POST /api/threads); the default bot when empty, and a
+    # staff bot's id returns its one existing chat instead of a second one
     bot_id: str = Field("", max_length=64)
 
 
 class BotBody(BaseModel):
     """A bot's persona: any subset of its fields, ``None`` (or left out) meaning "keep what
-    is there" on PATCH. The id and the creation time come back, never go in."""
+    is there" on PATCH. The id and the creation time come back, never go in. ``role`` is
+    server-owned (the default bot is the chief of staff, every other bot is staff) and
+    ignored when a request sends one."""
 
     name: str | None = Field(default=None, max_length=60)
     # the face: "dragon" (the built-in one), a studio face's id, or "" for the emoji
@@ -552,7 +559,8 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
 
     @app.post("/api/bots", dependencies=dep, status_code=201)
     async def create_bot(body: BotBody) -> dict[str, Any]:
-        """A new bot from any subset of its fields; the rest take their defaults."""
+        """A new staff bot from any subset of its fields; the rest take their defaults.
+        ``role`` is server-owned and ignored when sent."""
         try:
             return {"bot": svc.create_bot(body.model_dump(exclude_none=True))}
         except ValueError as exc:
@@ -560,7 +568,8 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
 
     @app.patch("/api/bots/{bot_id}", dependencies=dep)
     async def update_bot(bot_id: str, body: BotBody) -> dict[str, Any]:
-        """A partial change: only the fields given are written."""
+        """A partial change: only the fields given are written. ``role`` is server-owned
+        and ignored when sent."""
         try:
             return {"bot": svc.update_bot(bot_id, body.model_dump(exclude_none=True))}
         except KeyError:
@@ -588,7 +597,9 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
     @app.post("/api/threads", dependencies=dep)
     async def create_thread(body: ThreadBody) -> dict[str, Any]:
         """A new conversation; ``bot_id`` names the bot it speaks as (the default bot when
-        the body leaves it out)."""
+        the body leaves it out). One-chat rule: a staff bot's id returns the one thread it
+        already has — its meta, unchanged — and never creates a second one; the chief (the
+        default bot) gets a new thread every time."""
         try:
             thread = svc.create_thread(body.title, bot_id=body.bot_id or svc.default_bot_id)
         except KeyError:

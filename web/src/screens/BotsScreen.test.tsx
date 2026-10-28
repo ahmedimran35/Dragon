@@ -1,13 +1,15 @@
 import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AVATAR_COLORS, AvatarPicker } from "../components/AvatarPicker";
 import { setLocaleSetting } from "../i18n";
-import type { Bot } from "../types";
+import type { Bot, ThreadMeta } from "../types";
 import { BotsScreen } from "./BotsScreen";
 
 const toast = vi.fn();
 const dispatch = vi.fn();
 const setTab = vi.fn();
+const openThread = vi.fn();
 
 vi.mock("../store", () => ({
   useStore: () => ({
@@ -22,6 +24,7 @@ vi.mock("../store", () => ({
     dispatch,
     toast,
     setTab,
+    openThread,
   }),
 }));
 
@@ -54,6 +57,18 @@ const sage: Bot = {
 /** What the runtime holds: the mocked fetch reads and writes this list. */
 let serverBots: Bot[] = [];
 
+/** The chat a staff bot owns: what `POST /api/threads` answers with. */
+const sageThread: ThreadMeta = {
+  id: "sage-1",
+  title: "Sage",
+  created_at: "2026-10-28T09:00:00Z",
+  updated_at: "2026-10-28T09:00:00Z",
+  busy: false,
+  queued: 0,
+  events: 2,
+  bot_id: "b_9f3ab2c1",
+};
+
 const calls: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
 
 const REFUSED = "The default bot or the last bot cannot be deleted.";
@@ -63,6 +78,7 @@ beforeEach(() => {
   calls.length = 0;
   toast.mockClear();
   dispatch.mockClear();
+  openThread.mockClear();
   const location = { protocol: "http:", host: "localhost", href: "http://localhost/" };
   vi.stubGlobal("window", { location, setTimeout, clearTimeout, history: { replaceState: () => undefined } });
   vi.stubGlobal("location", location);
@@ -82,6 +98,7 @@ beforeEach(() => {
         serverBots = [...serverBots, bot];
         return ok({ bot });
       }
+      if (u === "/api/threads" && method === "POST") return ok(sageThread);
       const match = /^\/api\/bots\/([^/]+)$/.exec(u);
       if (match && method === "PATCH") {
         const bot: Bot = { ...serverBots.find((b) => b.id === decodeURIComponent(match[1])), ...(body as Partial<Bot>) } as Bot;
@@ -223,5 +240,32 @@ describe("BotsScreen", () => {
     const text = renderedText(screen);
     expect(text).toContain("Ember");
     expect(text).not.toContain("Sage");
+  });
+
+  it("opens a new bot on a face no other bot wears", async () => {
+    let screen!: ReactTestRenderer;
+    await act(async () => {
+      screen = create(createElement(BotsScreen));
+    });
+    await act(async () => {
+      button(screen, "New bot")?.props.onClick();
+    });
+    // Ember wears the dragon and Sage the green leaf: the draft starts on the sparkle on blue
+    const value = screen.root.findByType(AvatarPicker).props.value as { avatar: string; emoji: string; color: string };
+    expect(value).toEqual({ avatar: "", emoji: "✨", color: AVATAR_COLORS[0] });
+  });
+
+  it("opens the one chat of a staff bot, asking for it with its bot id", async () => {
+    let screen!: ReactTestRenderer;
+    await act(async () => {
+      screen = create(createElement(BotsScreen));
+    });
+    await open(screen, "Sage");
+    await act(async () => {
+      button(screen, "Chat")?.props.onClick();
+    });
+    const post = calls.find((c) => c.url === "/api/threads" && c.method === "POST");
+    expect(post?.body).toEqual({ title: "Sage", bot_id: "b_9f3ab2c1" });
+    expect(openThread).toHaveBeenCalledWith("sage-1");
   });
 });

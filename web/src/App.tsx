@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { setToken } from "./api";
 import { BrandMark } from "./components/BrandMark";
 import { BrowserPanel } from "./components/BrowserPanel";
+import { ChatsDrawer } from "./components/ChatsDrawer";
 import { Sidebar } from "./components/Sidebar";
 import { ChatScreen } from "./screens/ChatScreen";
 import { FeedScreen } from "./screens/FeedScreen";
@@ -152,6 +153,8 @@ export default function App() {
           </ul>
         </nav>
       </div>
+      {/* the chats drawer from the hamburger, over a narrow column */}
+      <ChatsDrawer />
       {/* the agent's browser, live, on the right of a wide window (a phone taps a frame in the chat instead) */}
       {!state.lite && state.browserOpen && <BrowserPanel />}
       <div className="pointer-events-none hidden w-0" />

@@ -1,9 +1,10 @@
 import { Check, Sparkles } from "lucide-react";
 import { DRAGON, dragonUrl, isDragon, studioUrl } from "../avatars";
 import { useT } from "../i18n";
+import type { Bot } from "../types";
 import { cx } from "../util";
 
-const EMOJI = ["✨", "🌙", "🪐", "🌿", "🔥", "🌊", "🦉", "🦊", "🐙", "🎯", "🧭", "💎", "🍀", "🎈", "🤖", "🧠"];
+export const AVATAR_EMOJI = ["✨", "🌙", "🪐", "🌿", "🔥", "🌊", "🦉", "🦊", "🐙", "🎯", "🧭", "💎", "🍀", "🎈", "🤖", "🧠"];
 export const AVATAR_COLORS = ["#0064d4", "#7c3aed", "#0891b2", "#059669", "#d97706", "#dc2626", "#db2777", "#4b5563"];
 
 export interface AvatarChoice {
@@ -85,7 +86,7 @@ export function AvatarPicker({
       {emojiMode && (
         <>
           <div className="grid grid-cols-8 gap-1.5">
-            {EMOJI.map((e) => (
+            {AVATAR_EMOJI.map((e) => (
               <button
                 key={e}
                 type="button"
@@ -114,4 +115,39 @@ export function AvatarPicker({
       )}
     </div>
   );
+}
+
+/** How many faces the "Suggested" row offers at once. */
+export const SUGGESTION_COUNT = 10;
+
+/**
+ * The faces a new bot can be suggested: the dragon and every emoji-on-a-colour pair of the
+ * picker's vocabulary. The pairs walk the emoji list while the colour steps along beside
+ * it, so neighbouring suggestions never look alike, and every emoji meets every colour
+ * somewhere in the list.
+ */
+function faceVocabulary(): AvatarChoice[] {
+  const out: AvatarChoice[] = [{ avatar: DRAGON, emoji: "", color: "" }];
+  for (let i = 0; i < AVATAR_EMOJI.length * AVATAR_COLORS.length; i++) {
+    const e = i % AVATAR_EMOJI.length;
+    out.push({ avatar: "", emoji: AVATAR_EMOJI[e], color: AVATAR_COLORS[(Math.floor(i / AVATAR_EMOJI.length) + e) % AVATAR_COLORS.length] });
+  }
+  return out;
+}
+
+/**
+ * Faces for a new bot to be suggested, ones the existing bots do not wear first: a face is
+ * skipped while some bot wears that dragon, that emoji or that colour, so two bots never
+ * start on the same face. When every face is worn the full vocabulary comes back, dragon
+ * first.
+ */
+export function suggestedFaces(existing: Array<Pick<Bot, "avatar" | "emoji" | "color">>, limit = SUGGESTION_COUNT): AvatarChoice[] {
+  const dragonWorn = existing.some((b) => !!b.avatar && isDragon(b.avatar));
+  const wornFaces = existing.filter((b) => b.avatar === "");
+  const emojiWorn = new Set(wornFaces.map((b) => b.emoji || "✨"));
+  const colorWorn = new Set(wornFaces.map((b) => b.color || AVATAR_COLORS[0]));
+  const worn = (f: AvatarChoice) => (f.avatar === DRAGON ? dragonWorn : emojiWorn.has(f.emoji) || colorWorn.has(f.color));
+  const vocabulary = faceVocabulary();
+  const fresh = vocabulary.filter((f) => !worn(f));
+  return (fresh.length > 0 ? fresh : vocabulary).slice(0, limit);
 }

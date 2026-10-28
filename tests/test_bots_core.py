@@ -60,14 +60,18 @@ def test_bot_store_crud_and_validation(tmp_path):
     store = BotStore(tmp_path / "bots.json")
     bots = store.list()
     assert [b["id"] for b in bots] == [DEFAULT_BOT_ID] and bots[0]["name"] == "Ember"
+    assert bots[0]["role"] == "chief", "the default bot is the chief of staff"
 
     made = store.create({"name": "Scout", "tone": "concise", "style": "terse", "noise": 1})
     assert re.fullmatch(r"b_[0-9a-f]{8}", made["id"])
     assert isinstance(made["created_at"], int) and made["created_at"] > 1_700_000_000
     assert made["tone"] == "concise" and made["style"] == "terse" and "noise" not in made
+    assert made["role"] == "staff", "every new bot joins the staff"
     assert store.create({"name": "Warm one", "tone": "warm"})["tone"] == "warm"
     # the id is minted here; a client-supplied one is ignored
     assert store.create({"id": "default", "name": "Copycat"})["id"] != "default"
+    # and so is a client-supplied role: server-owned, never obeyed
+    assert store.create({"name": "Upstart", "role": "chief"})["role"] == "staff"
 
     with pytest.raises(ValueError):  # a bot needs a name
         store.create({"tone": "warm"})
@@ -82,6 +86,7 @@ def test_bot_store_crud_and_validation(tmp_path):
     assert updated["name"] == "Scout" and updated["style"] == "terse"  # untouched fields stay
     assert updated["tagline"] == "Sees first" and updated["avatar"] == "dragon-2"
     assert store.get(made["id"]) == updated
+    assert store.update(made["id"], {"role": "chief"})["role"] == "staff", "a sent role is ignored"
 
     with pytest.raises(ValueError):  # the default bot stays
         store.delete("default")
@@ -102,6 +107,57 @@ def test_bot_ids_are_unique_and_stable(tmp_path):
     ids = {store.create({"name": f"Bot {i}"})["id"] for i in range(5)}
     assert len(ids) == 5 and DEFAULT_BOT_ID not in ids
     assert all(re.fullmatch(r"b_[0-9a-f]{8}", i) for i in ids)
+
+
+def test_bots_without_a_role_migrate_and_the_file_is_rewritten(tmp_path):
+    """A bots.json from before roles existed: the default bot becomes the chief of staff,
+    every other bot staff, and the file is rewritten in the new shape. A file that claims
+    a role the id contradicts loses the claim the same way — only "chief" and "staff"
+    can exist, and the id decides which."""
+    path = tmp_path / "bots.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "bots": [
+                    {"id": "default", "name": "Wren", "created_at": 1700000000},
+                    {
+                        "id": "b_1a2b3c4d",
+                        "name": "Scout",
+                        "tone": "concise",
+                        "created_at": 1700000001,
+                    },
+                ],
+            }
+        ),
+        "utf-8",
+    )
+    store = BotStore(path)
+    assert [b["role"] for b in store.list()] == ["chief", "staff"]
+    saved = json.loads(path.read_text("utf-8"))
+    assert [b["role"] for b in saved["bots"]] == ["chief", "staff"], "rewritten in the new shape"
+
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "bots": [
+                    {"id": "default", "name": "Wren", "role": "staff", "created_at": 1700000000},
+                    {
+                        "id": "b_1a2b3c4d",
+                        "name": "Scout",
+                        "role": "chief",
+                        "created_at": 1700000001,
+                    },
+                ],
+            }
+        ),
+        "utf-8",
+    )
+    store = BotStore(path)
+    assert [b["role"] for b in store.list()] == ["chief", "staff"]
+    saved = json.loads(path.read_text("utf-8"))
+    assert [b["role"] for b in saved["bots"]] == ["chief", "staff"]
 
 
 # ----------------------------------------------------------------------------- migration
@@ -130,6 +186,7 @@ def test_the_default_bot_migrates_from_profile_json(settings: Settings):
     assert len(bots) == 1
     bot = bots[0]
     assert bot["id"] == "default" and bot["name"] == "Wren"
+    assert bot["role"] == "chief"
     assert bot["avatar"] == "dragon" and bot["emoji"] == "🦉" and bot["color"] == "#123456"
     assert bot["tagline"] == "Your day, sorted."
     assert bot["tone"] == "playful" and bot["communication"] == "bullets"
@@ -249,6 +306,32 @@ def test_threads_bind_to_a_bot_and_say_so(settings: Settings):
     again = DragonService(settings, llm=MockLLM([]))
     assert again.threads[thread.id].bot_id == made["id"]
     assert again.bot_of_thread(thread.id)["name"] == "Scout"
+
+
+def test_a_staff_bot_gets_one_thread_and_the_chief_gets_many(settings: Settings):
+    """The one-chat rule: a staff bot's chat is its only thread — asking again returns it,
+    unchanged — while the chief of staff (the default bot) gets a new chat every time."""
+    service = DragonService(settings, llm=MockLLM([]))
+    scout = service.create_bot({"name": "Scout"})
+    assert scout["role"] == "staff"
+    first = service.create_thread("Scout chat", bot_id=scout["id"])
+    again = service.create_thread("Another", bot_id=scout["id"])
+    assert again.id == first.id
+    assert again.title == first.title, "the one chat comes back unchanged"
+    assert [t.id for t in service.visible_threads() if t.bot_id == scout["id"]] == [first.id]
+
+    one = service.create_thread("one")
+    two = service.create_thread("two", bot_id=DEFAULT_BOT_ID)
+    assert one.id != two.id and one.bot_id == two.bot_id == DEFAULT_BOT_ID
+
+    # the rule survives a restart: the loaded chat is still the bot's one chat
+    reloaded = DragonService(settings, llm=MockLLM([]))
+    assert reloaded.create_thread("more", bot_id=scout["id"]).id == first.id
+
+    # deleting the chat frees the slot: asking again makes a new one
+    service.delete_thread(first.id)
+    fresh = service.create_thread("back", bot_id=scout["id"])
+    assert fresh.id != first.id
 
 
 def test_delete_bot_reassigns_its_threads(settings: Settings):

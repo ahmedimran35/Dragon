@@ -5,6 +5,16 @@ Where the page renders is a :class:`~dragon.tools.browser_backends.BrowserBacken
 Playwright Chromium on the computer (``pip install "dragon[browser]" && playwright install
 chromium``), with a profile kept under the workspace so logins survive a restart.
 
+Every bot gets its own browser: its own persistent profile, its own pages and its own
+downloads, so cookies and signed-in sessions do not leak between bots. The chief (bot id
+``default``) keeps the historic location ``<workspace>/browser-profile`` — its existing
+logins keep working — while any other bot uses
+``<workspace>/bots/<bot_id>/browser-profile``. A run outside any bot turn (a channel
+login, the CLI) sees the default bot and therefore uses the chief's profile; that is
+intended. One Playwright context and one lock per bot: a bot's own browser actions
+serialise against each other while different bots browse in parallel, each in its own
+context.
+
 What the browser shows is also shown to the user: after every action a JPEG frame of the
 viewport goes to ``on_frame`` (the app turns that into a live browser card), and the user can
 take over — click, type, open a URL — through :meth:`Browser.user_action`. That is how a
@@ -25,6 +35,7 @@ from urllib.parse import urljoin, urlparse
 from pydantic import PrivateAttr
 
 from dragon.agent.holds import HAND_OVER_TIMEOUT_S, took_over_note
+from dragon.bots import BOT_ID_RE, DEFAULT_BOT_ID, running_bot_id
 from dragon.logger import logger
 from dragon.schema import RiskLevel, ToolResult
 from dragon.tools.base import BaseTool, CallAssessment
@@ -43,6 +54,18 @@ VIEWPORT = PROFILES["desktop"].viewport
 # what a fetch hands back to the model at most
 FETCH_MAX_HOPS = 5
 FETCH_MAX_CHARS = 20_000
+
+
+def _safe_bot_id(bot_id: str) -> str:
+    """A bot id that is safe as one path component of the workspace.
+
+    The roster only hands out ``default`` and ``b_`` + 8 hex digits; anything else is
+    refused rather than risk two bots sharing (or escaping into) one directory.
+    """
+    bot = str(bot_id or "").strip()
+    if bot == DEFAULT_BOT_ID or BOT_ID_RE.fullmatch(bot):
+        return bot
+    raise ValueError(f"not a bot id: {bot_id!r}")
 
 
 def _redirect_target(result: dict[str, Any], base: str) -> str | None:
@@ -188,22 +211,52 @@ class Browser(BaseTool):
     holds: Any = None
     hand_over_timeout: float = HAND_OVER_TIMEOUT_S
 
-    _backend: Any = PrivateAttr(default=None)
-    _lock: Any = PrivateAttr(default=None)
-    # what the user did since the model last looked at the page
-    _user_actions: list[str] = PrivateAttr(default_factory=list)
-    # the host of the page last summarised, for the Sentinel's view of the next action
-    _last_host: str | None = PrivateAttr(default=None)
+    # one browser per bot: backend (Playwright context), lock and notes, keyed by bot id,
+    # so two bots working at once never share a context, a profile or each other's state
+    _backends: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _locks: dict[str, asyncio.Lock] = PrivateAttr(default_factory=dict)
+    # what the user did since the model last looked at the page, per bot
+    _user_actions: dict[str, list[str]] = PrivateAttr(default_factory=dict)
+    # the host of the page last summarised per bot, for the Sentinel's view of the next action
+    _last_hosts: dict[str, str | None] = PrivateAttr(default_factory=dict)
 
     # ------------------------------------------------------------------ lifecycle
+    def profile_dir_for(self, bot_id: str | None = None) -> Path:
+        """Playwright's persistent profile for one bot: cookies and logins, kept under the
+        workspace.
+
+        The chief (``default``) keeps the historic ``<workspace>/browser-profile`` so its
+        existing logins keep working; every other bot gets
+        ``<workspace>/bots/<bot_id>/browser-profile`` and never sees another bot's
+        sessions. ``bot_id=None`` means the running bot, which outside a bot turn
+        (channel logins, the CLI) is the chief — intended.
+        """
+        bot = _safe_bot_id(bot_id or running_bot_id())
+        if bot == DEFAULT_BOT_ID:
+            return self.workspace / "browser-profile"
+        return self.workspace / "bots" / bot / "browser-profile"
+
     @property
     def profile_dir(self) -> Path:
-        """Playwright's persistent profile: cookies and logins, kept under the workspace."""
-        return self.workspace / "browser-profile"
+        """The running bot's persistent profile (see :meth:`profile_dir_for`)."""
+        return self.profile_dir_for()
 
-    def _pick_backend(self) -> BrowserBackend:
-        """The backend for a new session. A running one is kept until it is closed."""
-        current = self._backend
+    def screenshots_dir_for(self, bot_id: str | None = None) -> Path:
+        """Where the ``screenshot`` action saves: ``<workspace>/screenshots`` for the
+        chief, ``<workspace>/bots/<bot_id>/screenshots`` for a staff bot — each bot's
+        work stays in its own corner of the workspace."""
+        bot = _safe_bot_id(bot_id or running_bot_id())
+        if bot == DEFAULT_BOT_ID:
+            return self.workspace / "screenshots"
+        return self.workspace / "bots" / bot / "screenshots"
+
+    def _pick_backend(self, bot_id: str | None = None) -> BrowserBackend:
+        """The backend for one bot's session. A running one is kept until it is closed.
+
+        One backend — one Playwright context on one profile — per bot.
+        """
+        bot = _safe_bot_id(bot_id or running_bot_id())
+        current = self._backends.get(bot)
         if current is not None and current.open:
             return current
         if not playwright_available():
@@ -211,38 +264,62 @@ class Browser(BaseTool):
                 "playwright is not installed. Run: pip install 'dragon[browser]' && playwright install chromium"
             )
         backend: BrowserBackend = PlaywrightBackend(
-            self.profile_dir,
+            self.profile_dir_for(bot),
             headless=self.headless,
             timeout_ms=self.timeout_ms,
             profile=profile_named(self.default_profile or "desktop"),
         )
-        self._backend = backend
+        self._backends[bot] = backend
         return backend
 
     @property
     def backend(self) -> BrowserBackend | None:
-        return self._backend
+        """The running bot's backend, if it has one (see :meth:`backend_for`)."""
+        return self.backend_for()
+
+    def backend_for(self, bot_id: str | None = None) -> BrowserBackend | None:
+        """One bot's backend, if it has one."""
+        return self._backends.get(_safe_bot_id(bot_id or running_bot_id()))
 
     @property
     def backend_kind(self) -> str:
         """Which backend a session would use now: "playwright" or ""."""
-        if self._backend is not None and self._backend.open:
-            return str(self._backend.kind)
+        current = self.backend_for()
+        if current is not None and current.open:
+            return str(current.kind)
         return "playwright" if playwright_available() else ""
 
     @property
     def lock(self) -> asyncio.Lock:
-        if self._lock is None:
-            self._lock = asyncio.Lock()
-        return self._lock
+        """The running bot's browser lock (see :meth:`lock_for`)."""
+        return self.lock_for()
+
+    def lock_for(self, bot_id: str | None = None) -> asyncio.Lock:
+        """One lock per bot: a bot's browser actions serialise against each other while
+        different bots drive their own contexts in parallel. One global lock would stop
+        the world for a slow page; per-bot keeps the concurrency as coarse as the
+        isolation and no coarser."""
+        bot = _safe_bot_id(bot_id or running_bot_id())
+        lock = self._locks.get(bot)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[bot] = lock
+        return lock
 
     @property
     def open(self) -> bool:
-        return self._backend is not None and self._backend.open
+        """Whether the running bot's browser is open (see :meth:`open_for`)."""
+        return self.open_for()
+
+    def open_for(self, bot_id: str | None = None) -> bool:
+        """Whether one bot's browser is open."""
+        current = self.backend_for(bot_id)
+        return current is not None and current.open
 
     @property
     def viewport(self) -> dict[str, int]:
-        return self._backend.profile.viewport if self._backend is not None else VIEWPORT
+        current = self.backend_for()
+        return current.profile.viewport if current is not None else VIEWPORT
 
     async def _frame(
         self, backend: BrowserBackend, action: str, by_user: bool = False, thread: str | None = None
@@ -284,8 +361,20 @@ class Browser(BaseTool):
         return f"'{text[:40]}'" if text else f"[{index}]"
 
     async def cleanup(self) -> None:
-        backend = self._backend
-        self._backend = None
+        """Close every bot's browser: the tool itself is going away."""
+        backends = list(self._backends.values())
+        self._backends.clear()
+        self._user_actions.clear()
+        self._last_hosts.clear()
+        for backend in backends:
+            await backend.close()
+
+    async def _close_bot(self, bot_id: str | None = None) -> None:
+        """Close one bot's browser and drop its notes; other bots keep browsing."""
+        bot = _safe_bot_id(bot_id or running_bot_id())
+        backend = self._backends.pop(bot, None)
+        self._user_actions.pop(bot, None)
+        self._last_hosts.pop(bot, None)
         if backend is not None:
             await backend.close()
 
@@ -319,7 +408,12 @@ class Browser(BaseTool):
         )
 
     def _current_host(self) -> str | None:
-        return self._last_host
+        return self._last_hosts.get(running_bot_id())
+
+    def _notes(self, bot_id: str | None = None) -> list[str]:
+        """What the user did on one bot's page since the model last looked at it."""
+        bot = _safe_bot_id(bot_id or running_bot_id())
+        return self._user_actions.setdefault(bot, [])
 
     # ------------------------------------------------------------------ execution
     async def execute(
@@ -342,13 +436,13 @@ class Browser(BaseTool):
         **_: Any,
     ) -> ToolResult:
         if action == "close":
-            await self.cleanup()
+            await self._close_bot()
             return ToolResult(output="Browser closed.")
         if action == "hand_over":
             return await self._hand_over(reason)
         # the user has the page: wait for their Done, then look again before acting
         if self.holds is not None and await self.holds.wait(self.holds.thread(), "browser"):
-            self._user_actions.append("used the page themselves")
+            self._notes().append("used the page themselves")
         async with self.lock:
             try:
                 backend = self._pick_backend()
@@ -454,7 +548,7 @@ class Browser(BaseTool):
             await self._frame(backend, "Waited for the page")
             return await self._state(backend, brief=True)
         if action == "screenshot":
-            shots = self.workspace / "screenshots"
+            shots = self.screenshots_dir_for()
             shots.mkdir(parents=True, exist_ok=True)
             path = shots / f"{time.strftime('%Y%m%d-%H%M%S')}.jpg"
             path.write_bytes(await backend.screenshot(85))
@@ -574,14 +668,20 @@ class Browser(BaseTool):
         key: str | None = None,
         dy: float | None = None,
         url: str | None = None,
+        bot_id: str | None = None,
     ) -> dict[str, Any]:
         """An action by the user from the app. ``x``/``y`` are fractions of the frame.
+
+        It lands on ``bot_id``'s browser — pass the bot of the thread being watched.
+        Without a ``bot_id`` it is the running bot's, which outside a run is the chief's;
+        that is also where channel logins and the CLI land.
 
         Not reviewed by the Sentinel: it is the user acting, on their own browser, with
         their own hands. What they did is reported to the model the next time it looks.
         """
-        async with self.lock:
-            backend = self._pick_backend()
+        bot = _safe_bot_id(bot_id or running_bot_id())
+        async with self.lock_for(bot):
+            backend = self._pick_backend(bot)
             await backend.ensure()
             vp = backend.profile.viewport
             if action == "click":
@@ -626,7 +726,7 @@ class Browser(BaseTool):
             else:
                 raise ValueError(f"unknown action '{action}'")
             if note:
-                self._user_actions.append(note)
+                self._notes(bot).append(note)
                 logger.info("browser: user {}", note)
             await self._frame(backend, caption, by_user=True, thread=thread)
             return {"url": await backend.url(), "title": await backend.title()}
@@ -644,11 +744,12 @@ class Browser(BaseTool):
         text = " ".join(str(text).split()) if text else ""
         if len(text) > max_text:
             text = text[:max_text] + f" ... [truncated, {len(text)} chars]"
-        self._last_host = host_of(url) if url else None
+        self._last_hosts[running_bot_id()] = host_of(url) if url else None
         lines = []
-        if self._user_actions:
-            done = "; ".join(self._user_actions[-8:])
-            self._user_actions.clear()
+        notes = self._notes()
+        if notes:
+            done = "; ".join(notes[-8:])
+            notes.clear()
             lines += [
                 f"Note: the user took over the browser in the app and {done}. "
                 "Continue from the page as it is now; do not redo what they did.",

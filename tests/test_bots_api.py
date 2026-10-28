@@ -27,6 +27,7 @@ from dragon.ui import ApprovalDecision, ApprovalRequest, HeadlessUI
 # the Bot object the three layers share
 BOT_KEYS = {
     "id",
+    "role",
     "name",
     "avatar",
     "emoji",
@@ -58,25 +59,35 @@ def test_bot_routes_create_change_and_remove(server):
     assert set(listing) == {"bots"} and len(listing["bots"]) == 1
     default = listing["bots"][0]
     assert default["id"] == "default" and default["name"] == service.settings.agent.name
+    assert default["role"] == "chief", "the default bot is the chief of staff"
     assert set(default) == BOT_KEYS and isinstance(default["created_at"], int)
 
     created = client.post(
         "/api/bots",
-        json={"name": "Scout", "tagline": "Keeps an eye out.", "model": "gpt-6.1-sol"},
+        json={
+            "name": "Scout",
+            "tagline": "Keeps an eye out.",
+            "model": "gpt-6.1-sol",
+            "role": "chief",  # server-owned: ignored, never obeyed
+        },
     )
     assert created.status_code == 201, created.text
     bot = created.json()["bot"]
     assert set(created.json()) == {"bot"} and set(bot) == BOT_KEYS
     assert re.fullmatch(r"b_[0-9a-f]{8}", bot["id"])
     assert bot["name"] == "Scout" and bot["tagline"] == "Keeps an eye out."
+    assert bot["role"] == "staff", "every new bot joins the staff, whatever the request says"
     # the model is stored as given; "" would mean the runtime default
     assert bot["model"] == "gpt-6.1-sol"
 
-    patched = client.patch(f"/api/bots/{bot['id']}", json={"tagline": "On patrol."})
+    patched = client.patch(
+        f"/api/bots/{bot['id']}", json={"tagline": "On patrol.", "role": "chief"}
+    )
     assert patched.status_code == 200, patched.text
     assert set(patched.json()) == {"bot"}
     assert patched.json()["bot"]["name"] == "Scout", "a partial change leaves the rest alone"
     assert patched.json()["bot"]["tagline"] == "On patrol."
+    assert patched.json()["bot"]["role"] == "staff", "a PATCH cannot promote a bot either"
     assert client.patch("/api/bots/b_nobody00", json={"name": "x"}).status_code == 404
 
     gone = client.delete(f"/api/bots/{bot['id']}")
@@ -104,6 +115,13 @@ def test_thread_creation_with_and_without_a_bot(server):
     as_scout = client.post("/api/threads", json={"title": "Scout chat", "bot_id": bot["id"]})
     assert as_scout.status_code == 200, as_scout.text
     assert as_scout.json()["bot_id"] == bot["id"]
+    # the one-chat rule: a staff bot's id returns its one thread, never a second one
+    again = client.post("/api/threads", json={"title": "Other", "bot_id": bot["id"]})
+    assert again.json()["id"] == as_scout.json()["id"]
+    assert again.json()["title"] == as_scout.json()["title"]
+    # and the chief gets a new chat every time
+    other = client.post("/api/threads", json={"title": "More notes"})
+    assert other.json()["id"] != plain["id"]
     assert (
         client.post("/api/threads", json={"title": "Nowhere", "bot_id": "b_nobody00"}).status_code
         == 404
@@ -117,6 +135,7 @@ def test_the_state_snapshot_carries_bots_and_each_thread_bot(server):
     state = client.get("/api/state").json()
     assert [b["id"] for b in state["bots"]] == ["default", bot["id"]]
     assert all(set(b) == BOT_KEYS for b in state["bots"])
+    assert [b["role"] for b in state["bots"]] == ["chief", "staff"]
     metas = {t["id"]: t for t in state["threads"]}
     assert metas["main"]["bot_id"] == "default"
     assert metas[thread["id"]]["bot_id"] == bot["id"]

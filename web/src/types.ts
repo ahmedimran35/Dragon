@@ -256,6 +256,12 @@ export interface Bot {
   model: string;
   /** unix seconds */
   created_at: number;
+  /**
+   * "chief" for the default bot — the chief of staff that manages the roster — and "staff"
+   * for every other bot. Set by the runtime, never edited here; on a runtime from before
+   * roles the field is absent and the id "default" marks the chief.
+   */
+  role?: "chief" | "staff";
 }
 
 export type Capability = "chat" | "vision" | "image" | "video";

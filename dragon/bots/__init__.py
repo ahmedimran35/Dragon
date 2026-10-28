@@ -1,4 +1,8 @@
-"""Bots: the personas chats speak as.
+"""Bots: the personas chats speak as, and the roles of the chief of staff.
+
+Every bot has a ``role``: the default bot (``id == "default"``) is the user's chief of
+staff, every other bot is on its staff. The role is server-owned — derived from the id in
+:meth:`~dragon.bots.store.normalize`, never read from what a caller sends.
 
 :class:`~dragon.bots.store.BotStore` keeps them in ``<data_dir>/bots.json``. A thread is
 bound to one bot and the agent loop builds its identity (name, tone, style, standing
@@ -18,9 +22,13 @@ from dragon.bots.store import (
     BOT_ID_RE,
     DEFAULT_BOT_ID,
     DEFAULT_BOT_NAME,
+    ROLE_CHIEF,
+    ROLE_STAFF,
+    ROLES,
     BotStore,
     new_bot_id,
     normalize,
+    role_of,
 )
 
 # whose turn is running: set by DragonAgent.run for the duration of one run, so every
@@ -45,11 +53,15 @@ __all__ = [
     "BOT_ID_RE",
     "DEFAULT_BOT_ID",
     "DEFAULT_BOT_NAME",
+    "ROLES",
+    "ROLE_CHIEF",
+    "ROLE_STAFF",
     "BotStore",
     "current_bot",
     "current_bot_id",
     "new_bot_id",
     "normalize",
+    "role_of",
     "running_bot",
     "running_bot_id",
 ]

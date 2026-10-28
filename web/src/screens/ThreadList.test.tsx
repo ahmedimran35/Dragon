@@ -91,18 +91,11 @@ function textOf(node: unknown): string {
   return "";
 }
 
-async function newChat(title: string, pickName?: string, onPick = vi.fn()) {
+async function newChat(title: string, onPick = vi.fn()) {
   let screen!: ReactTestRenderer;
   await act(async () => {
     screen = create(createElement(ThreadList, { threads: [], active: "main", onPick }));
   });
-  if (pickName) {
-    const picked = screen.root.findAllByProps({ role: "radio" }).find((n) => textOf(n).includes(pickName));
-    expect(picked).toBeDefined();
-    await act(async () => {
-      picked?.props.onClick();
-    });
-  }
   await act(async () => {
     screen.root.findAllByType("input")[0].props.onChange({ target: { value: title } });
   });
@@ -112,21 +105,42 @@ async function newChat(title: string, pickName?: string, onPick = vi.fn()) {
   return onPick;
 }
 
-describe("new chats carry the bot they are with", () => {
+describe("new chats", () => {
   // the labels looked for are the English ones, whatever the machine running the suite speaks
   beforeEach(() => setLocaleSetting("en"));
 
-  it("sends the chosen bot's id when the chat is created", async () => {
-    const onPick = await newChat("Trip", "Sage");
+  it("creates them with no bot: a new chat is always the chief's", async () => {
+    const onPick = await newChat("Trip");
     const post = calls.find((c) => c.url === "/api/threads" && c.method === "POST");
     expect(post).toBeDefined();
-    expect(post?.body).toEqual({ title: "Trip", bot_id: "b_9f3ab2c1" });
+    expect(post?.body).toEqual({ title: "Trip" });
     expect(onPick).toHaveBeenCalledWith("side-1");
   });
 
-  it("sends the default bot's id when no bot is chosen", async () => {
-    await newChat("Notes");
-    const post = calls.find((c) => c.url === "/api/threads" && c.method === "POST");
-    expect(post?.body).toEqual({ title: "Notes", bot_id: "default" });
+  it("still opens the chat that comes back", async () => {
+    const onPick = await newChat("Notes");
+    expect(onPick).toHaveBeenCalledWith("side-1");
+  });
+});
+
+describe("the chats list", () => {
+  beforeEach(() => setLocaleSetting("en"));
+
+  it("carries the face and the name of the staff bot whose chat it is", async () => {
+    let screen!: ReactTestRenderer;
+    await act(async () => {
+      screen = create(
+        createElement(ThreadList, {
+          threads: [{ ...created, id: "sage-1", title: "Trip planning", bot_id: sage.id }],
+          active: "main",
+          onPick: vi.fn(),
+        }),
+      );
+    });
+    const text = textOf(screen.toJSON());
+    expect(text).toContain("Trip planning");
+    expect(text).toContain("Sage");
+    // the bot's own face, as the row's avatar
+    expect(screen.root.findAllByProps({ role: "img" }).length).toBeGreaterThan(0);
   });
 });

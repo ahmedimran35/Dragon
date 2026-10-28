@@ -1,12 +1,14 @@
-import { Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { Check, Loader2, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { DRAGON } from "../avatars";
-import { botMood, defaultBot, DEFAULT_BOT_ID, type Presence, type PresenceInput } from "../bots";
+import { botMood, defaultBot, isChief, type Presence, type PresenceInput } from "../bots";
 import { Avatar } from "../components/Avatar";
-import { AVATAR_COLORS, AvatarPicker } from "../components/AvatarPicker";
+import { AVATAR_COLORS, AvatarPicker, suggestedFaces, SUGGESTION_COUNT, type AvatarChoice } from "../components/AvatarPicker";
 import { PageBar } from "../components/BackBar";
+import { ChiefBadge } from "../components/ChiefBadge";
 import {
+  FieldLabel,
   IdentityNameFields,
   IdentityVoice,
   commLabel,
@@ -17,6 +19,7 @@ import {
 } from "../components/IdentityForm";
 import { useT } from "../i18n";
 import { useStore } from "../store";
+import { useBotChat } from "../useBotChat";
 import type { Bot } from "../types";
 import { cx } from "../util";
 
@@ -121,9 +124,11 @@ export function BotsScreen() {
   const newBot = () => {
     setError(null);
     setConfirming(false);
+    // it starts on a face no other bot wears, so two bots never open on the same face
+    const face: AvatarChoice = suggestedFaces(bots, 1)[0] ?? { avatar: DRAGON, emoji: "✨", color: AVATAR_COLORS[0] };
     setEditing({
       id: null,
-      identity: { name: "", tagline: "", avatar: DRAGON, emoji: "✨", color: AVATAR_COLORS[0], tone: "", communication: "", style: "", user_name: "" },
+      identity: { name: "", tagline: "", avatar: face.avatar, emoji: face.emoji, color: face.color, tone: "", communication: "", style: "", user_name: "" },
       instructions: "",
     });
     scrollToPanel();
@@ -228,11 +233,7 @@ export function BotsScreen() {
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1.5">
                           <span className="truncate text-[14px] font-semibold leading-tight">{bot.name}</span>
-                          {bot.id === DEFAULT_BOT_ID && (
-                            <span className="shrink-0 rounded-full bg-surface-2 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted">
-                              {t("Default")}
-                            </span>
-                          )}
+                          {isChief(bot) && <ChiefBadge compact />}
                         </span>
                         <span className="mt-0.5 block truncate text-[11.5px] leading-snug text-muted">
                           {bot.tagline || bot.instructions.split("\n")[0] || t(PRESENCE_LABEL[mood])}
@@ -363,12 +364,15 @@ function EditorPanel({
   onCancel: () => void;
 }) {
   const t = useT();
+  const openChat = useBotChat();
   const draft = editing.id === null;
   const named = editing.identity.name.trim().length > 0;
   const stored = editing.id ? bots.find((b) => b.id === editing.id) : null;
   const mood: Presence = editing.id ? botMood(editing.id, presence) : "idle";
   const tone = toneLabel(editing.identity.tone);
   const comm = commLabel(editing.identity.communication);
+  // faces the draft could wear: ones none of the existing bots wears
+  const suggestions = useMemo(() => (draft ? suggestedFaces(bots, SUGGESTION_COUNT) : []), [draft, bots]);
   // the face, the name and the line follow the form as it is typed
   const preview: Bot = {
     id: editing.id ?? "draft",
@@ -383,6 +387,7 @@ function EditorPanel({
     instructions: editing.instructions,
     model: "",
     created_at: 0,
+    role: stored?.role,
   };
   const heading = editing.identity.name.trim() || t("New bot");
   const sub = editing.identity.tagline.trim() || editing.instructions.trim().split("\n")[0];
@@ -404,15 +409,11 @@ function EditorPanel({
             <h2 className="truncate text-[20px] font-bold leading-tight tracking-tight">{heading}</h2>
             {sub && <p className="mt-1 truncate text-[13px] text-muted">{sub}</p>}
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              {isChief(preview) && <ChiefBadge />}
               {!draft && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-surface/70 px-2.5 py-1 text-[11px] font-medium text-muted">
                   <span className={cx("h-2 w-2 rounded-full", PRESENCE_DOT[mood])} />
                   {t(PRESENCE_LABEL[mood])}
-                </span>
-              )}
-              {stored?.id === DEFAULT_BOT_ID && (
-                <span className="rounded-full border border-border/50 bg-surface/70 px-2.5 py-1 text-[11px] font-medium text-muted">
-                  {t("Default")}
                 </span>
               )}
               {tone && (
@@ -423,6 +424,15 @@ function EditorPanel({
               )}
             </div>
           </div>
+          {!draft && stored && (
+            <button
+              type="button"
+              onClick={() => void openChat(stored)}
+              className="flex shrink-0 items-center gap-1.5 self-start rounded-full bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-accent-fg shadow-sm transition active:scale-95"
+            >
+              <MessageSquare size={14} /> {t("Chat")}
+            </button>
+          )}
         </div>
       </header>
 
@@ -436,6 +446,34 @@ function EditorPanel({
           />
         </Section>
         <Section label={t("Face")}>
+          {draft && suggestions.length > 0 && (
+            <div className="mb-3.5">
+              <FieldLabel>{t("Suggested")}</FieldLabel>
+              <div className="mt-1.5 flex gap-2 overflow-x-auto pb-1">
+                {suggestions.map((look) => {
+                  const chosen = look.avatar
+                    ? editing.identity.avatar === look.avatar
+                    : editing.identity.avatar === "" && editing.identity.emoji === look.emoji && editing.identity.color === look.color;
+                  return (
+                    <button
+                      key={look.avatar || `${look.emoji}-${look.color}`}
+                      type="button"
+                      title={look.avatar ? t("The dragon") : look.emoji}
+                      aria-pressed={chosen}
+                      onClick={() => onIdentity({ ...editing.identity, ...look })}
+                      className={cx(
+                        "relative h-[52px] w-[52px] shrink-0 overflow-hidden rounded-full transition active:scale-95",
+                        chosen ? "ring-[2.5px] ring-accent ring-offset-2 ring-offset-bg" : "opacity-90 hover:opacity-100",
+                      )}
+                    >
+                      <Avatar profile={{ ...preview, ...look }} size={52} still />
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-[11.5px] leading-snug text-muted">{t("Faces your other bots do not wear.")}</p>
+            </div>
+          )}
           <AvatarPicker
             value={{ avatar: editing.identity.avatar, emoji: editing.identity.emoji, color: editing.identity.color }}
             onChange={(look) => onIdentity({ ...editing.identity, ...look })}

@@ -29,6 +29,15 @@ export function botIdOfThread(thread: Pick<ThreadMeta, "bot_id"> | null | undefi
 }
 
 /**
+ * The chief of staff: the bot that manages the roster and briefs the others. The runtime
+ * marks it with `role: "chief"`; on a runtime from before roles the id "default" is the
+ * mark. Every other bot is staff, and each staff bot has one chat of its own.
+ */
+export function isChief(bot: Pick<Bot, "id" | "role"> | null | undefined): boolean {
+  return !!bot && (bot.role === "chief" || bot.id === DEFAULT_BOT_ID);
+}
+
+/**
  * The default bot when the runtime sent none: the stand-in wears the runtime profile's
  * name and face, the way older runtimes showed one agent. `created_at` 0 marks it as
  * not a stored bot.

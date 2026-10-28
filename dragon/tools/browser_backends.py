@@ -6,7 +6,11 @@ watches and the Sentinel's view of an action live in one place.
 
 The backend is :class:`PlaywrightBackend` — Chromium through Playwright, with a
 **persistent profile** under the workspace, so a login made once (by the user taking over)
-is still there after a restart. It takes a :class:`BrowserProfile` — user agent and
+is still there after a restart. One backend owns one Playwright context on one profile
+directory, and the tool keeps one backend per bot: the chief's profile lives at
+``<workspace>/browser-profile`` and a staff bot's at
+``<workspace>/bots/<bot_id>/browser-profile``, so cookies and signed-in sessions never
+leak between bots. It takes a :class:`BrowserProfile` — user agent and
 viewport — with ``mobile`` and ``desktop`` presets, and can ``fetch`` a URL with the
 page's cookies (rung two of the ladder: a signed-in request without driving the screen).
 """
@@ -229,7 +233,9 @@ class PlaywrightBackend(BrowserBackend):
         self.headless = headless
         self.timeout_ms = timeout_ms
         self.profile = profile or PROFILES["desktop"]
-        # where a file the page offers ends up: <workspace>/downloads next to the profile
+        # where a file the page offers ends up: next to the profile it came with —
+        # <workspace>/downloads for the chief, <workspace>/bots/<bot_id>/downloads for a
+        # staff bot, so a bot's downloads land in its own corner of the workspace
         self.downloads_dir = profile_dir.parent / "downloads"
         self._pw: Any = None
         self._context: Any = None

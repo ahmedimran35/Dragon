@@ -1,13 +1,12 @@
 import { Bug, Globe, LayoutGrid, ListChecks, Menu, MessageCircle, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, Users, Wrench, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
-import { api } from "../api";
 import { defaultBot } from "../bots";
 import { useDeveloperTools } from "../devtools";
 import { useT } from "../i18n";
 import { ThreadList } from "../screens/ChatScreen";
 import { DragonSheet } from "../screens/DragonSheet";
 import { useStore, type Tab } from "../store";
-import type { Bot } from "../types";
+import { useBotChat } from "../useBotChat";
 import { cx } from "../util";
 import { Avatar } from "./Avatar";
 import { BotRoster } from "./BotRoster";
@@ -27,7 +26,7 @@ function bugReportUrl(_version: string): string {
  * screens as the narrow layout; nothing here is a second implementation of anything.
  */
 export function Sidebar() {
-  const { state, setTab, openThread, setBrowserOpen, dispatch, toast } = useStore();
+  const { state, setTab, openThread, setBrowserOpen } = useStore();
   const t = useT();
   const [activityOpen, setActivityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -39,16 +38,9 @@ export function Sidebar() {
   // the roster: the bots the runtime sent, else the stand-in that wears the profile's face
   const bots = state.bots.length > 0 ? state.bots : [defaultBot(state.bots, profile)];
 
-  // a tap on a roster row opens a new chat with that bot
-  const newChat = async (bot: Bot) => {
-    try {
-      const created = await api.createThread(t("New chat"), bot.id);
-      dispatch({ type: "ws", msg: { kind: "thread", thread: created } });
-      openThread(created.id);
-    } catch (e) {
-      toast((e as Error).message);
-    }
-  };
+  // a tap on a roster row opens that bot's chat: the staff bot's own single chat, a new
+  // chat with the chief
+  const openBotChat = useBotChat();
 
   const pendingApprovals = state.pendingApprovals.length;
   const proposals = state.goals.filter((g) => g.proposal && g.status !== "cancelled").length;
@@ -198,7 +190,7 @@ export function Sidebar() {
                 {t("Manage")}
               </button>
             </div>
-            <BotRoster bots={bots} presence={state} onPick={(bot) => void newChat(bot)} className="mt-1.5" />
+            <BotRoster bots={bots} presence={state} onPick={(bot) => void openBotChat(bot)} className="mt-1.5" />
             <h2 className="mt-4 px-1 text-[15px] font-semibold tracking-tight">{t("Chats")}</h2>
             <label className="mt-2 flex items-center gap-2 rounded-xl bg-surface-2 px-2.5 py-1.5 text-muted focus-within:ring-2 focus-within:ring-accent/40">
               <Search size={14} className="shrink-0" />

@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from dragon.bots import running_bot_id
 from dragon.schema import RiskLevel
 from dragon.tools.browser import _ANNOTATE_JS, Browser, BrowserFrame
 from dragon.tools.browser_backends import (
@@ -130,8 +131,9 @@ class FakeBackend(BrowserBackend):
 def tool_with(backend: BrowserBackend, tmp_path: Path) -> tuple[Browser, list[BrowserFrame]]:
     frames: list[BrowserFrame] = []
     tool = Browser(workspace=tmp_path, backend_mode="auto")
-    # the backend under test, already open so the tool keeps it; picking one is tested separately
-    tool._backend = backend
+    # the backend under test, already open so the tool keeps it; picking one is tested
+    # separately (every bot keeps its own backend, under its own bot id)
+    tool._backends[running_bot_id()] = backend
     backend._open = True  # type: ignore[attr-defined]
     tool.on_frame = frames.append
     return tool, frames

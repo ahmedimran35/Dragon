@@ -28,7 +28,7 @@ from dragon.agent import DragonAgent, Incoming
 from dragon.app import DragonApp
 from dragon.avatar import AvatarStudio
 from dragon.background import spawn
-from dragon.bots import DEFAULT_BOT_ID, BotStore
+from dragon.bots import DEFAULT_BOT_ID, ROLE_STAFF, BotStore
 from dragon.coding.service import CodingService
 from dragon.config import Settings
 from dragon.goals import Goal
@@ -342,6 +342,9 @@ class DragonService:
         self.push = PushService(settings.data_dir)
         self.ui.on_event = self._maybe_push
         self.app = DragonApp(settings, ui=self.ui, llm=llm, session_id="app")
+        # the roster tool reaches this service's bot methods through the app (the tool is
+        # built before the service exists, so the link points the other way)
+        self.app.service = self
         # a hold belongs to the chat whose run is acting (docs/browser.md, contract C1)
         self.app.holds.thread_of = current_thread.get
         self.watch_browser()
@@ -565,24 +568,27 @@ class DragonService:
     # ------------------------------------------------------------------ bots
     @property
     def default_bot_id(self) -> str:
-        """The bot every thread speaks as unless it names another one."""
+        """The chief of staff: the bot every thread speaks as unless it names another."""
         return DEFAULT_BOT_ID
 
     def list_bots(self) -> list[dict[str, Any]]:
-        """Every bot as its JSON object, the default bot first."""
+        """Every bot as its JSON object, the default bot first. Each carries its
+        server-owned ``role``: "chief" for the default bot, "staff" for the rest."""
         return self.bots.list()
 
     def create_bot(self, data: dict[str, Any]) -> dict[str, Any]:
-        """A new bot (``name`` required; ``tone`` a key of :data:`TONES`); the id is
-        minted here. Raises :class:`ValueError` for a value that cannot be kept."""
+        """A new staff bot (``name`` required; ``tone`` a key of :data:`TONES`); the id is
+        minted here and ``role`` in ``data`` is ignored (server-owned). Raises
+        :class:`ValueError` for a value that cannot be kept."""
         bot = self.bots.create(data)
         self.bus.publish({"kind": "bots", "bots": self.list_bots()})
         return bot
 
     def update_bot(self, bot_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Change one bot (:class:`KeyError` for an unknown id). The threads speaking as
-        it pick the new persona up at once; the default bot mirrors its identity into
-        profile.json, which older surfaces read."""
+        """Change one bot (:class:`KeyError` for an unknown id; ``role`` in ``data`` is
+        ignored — server-owned). The threads speaking as it pick the new persona up at
+        once; the default bot mirrors its identity into profile.json, which older surfaces
+        read."""
         bot = self.bots.update(bot_id, data)
         if bot_id == self.default_bot_id:
             self._mirror_profile(bot)
@@ -873,10 +879,19 @@ class DragonService:
 
     def create_thread(self, title: str = "", bot_id: str = "") -> Thread:
         """A side chat, speaking as ``bot_id``'s bot (the default bot when empty).
-        :class:`KeyError` when the bot does not exist."""
+
+        One-chat rule: a staff bot has exactly one thread — its own chat, separate from
+        the chief's — so asking for its chat again returns the thread it already has,
+        unchanged, and never makes a second one. The chief of staff (the default bot)
+        gets a new chat every time. :class:`KeyError` when the bot does not exist."""
         bot_id = (bot_id or "").strip() or DEFAULT_BOT_ID
-        if self.bots.get(bot_id) is None:
+        bot = self.bots.get(bot_id)
+        if bot is None:
             raise KeyError(bot_id)
+        if bot.get("role") == ROLE_STAFF:
+            existing = next((t for t in self.threads.values() if t.bot_id == bot_id), None)
+            if existing is not None:
+                return existing
         tid = "t_" + uuid.uuid4().hex[:8]
         thread = self._make_thread(tid, title.strip() or "Side chat", bot_id=bot_id)
         self._save_index()
@@ -1268,17 +1283,18 @@ class DragonService:
         ):
             raise ValueError(f"unknown browser action '{action}'")
         tool = self.browser
+        bot_id = self.bot_of_thread(thread)["id"]
         hold: dict[str, Any] | None = None
         if action == "take_over":
             hold = self.app.holds.open(thread, "browser", by="user", reason="").to_event()
         elif action == "handed_back":
             released = self.app.holds.release(thread, "browser")
             hold = released.to_event() if released is not None else None
-        if action in ("take_over", "handed_back") and (tool is None or not tool.open):
+        if action in ("take_over", "handed_back") and (tool is None or not tool.open_for(bot_id)):
             return {"url": "", "title": "", "hold": hold}
         if tool is None:
             raise LookupError("the browser tool is not enabled")
-        if action not in ("look", "navigate") and not tool.open:
+        if action not in ("look", "navigate") and not tool.open_for(bot_id):
             raise LookupError("the browser is not open right now; open a URL first")
         result = await tool.user_action(
             action,
@@ -1289,6 +1305,7 @@ class DragonService:
             key=body.get("key"),
             dy=body.get("dy"),
             url=body.get("url"),
+            bot_id=bot_id,
         )
         if hold is not None:
             result["hold"] = hold
@@ -1314,13 +1331,13 @@ class DragonService:
         if hold.tool == "browser":
             # the model hears that the page was used, the way the app reports it
             tool = self.browser
-            if tool is not None and tool.open:
+            if tool is not None and tool.open_for(self.bot_of_thread(hold.thread)["id"]):
                 spawn(self._browser_handed_back(tool, hold.thread), "browser handed back")
         return hold.to_event()
 
     async def _browser_handed_back(self, tool: Browser, thread: str) -> None:
         try:
-            await tool.user_action("handed_back", thread)
+            await tool.user_action("handed_back", thread, bot_id=self.bot_of_thread(thread)["id"])
         except Exception as exc:  # noqa: BLE001 — the hold is off either way
             logger.debug("browser handed back: {}", exc)
 

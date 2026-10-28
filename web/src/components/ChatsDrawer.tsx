@@ -1,13 +1,13 @@
 import { FileText, Home, MessageSquare, Search, Settings, SquarePen, Terminal, Trash2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
-import { defaultBot } from "../bots";
-import { BotPicker } from "./BotPicker";
+import { isChief } from "../bots";
 import { useDeveloperTools } from "../devtools";
 import { useStore } from "../store";
-import type { ThreadMeta } from "../types";
+import type { Bot, ThreadMeta } from "../types";
 import { intlLocale, useT } from "../i18n";
 import { cx } from "../util";
+import { Avatar } from "./Avatar";
 import { useFocusTrap } from "./useFocusTrap";
 
 /**
@@ -40,9 +40,6 @@ export function ChatsDrawer() {
 
   const name = state.profile?.name || "Dragon";
   const developer = useDeveloperTools();
-  // which bot a new chat is with: the chosen one, else the default bot
-  const [pickedBot, setPickedBot] = useState("");
-  const botId = pickedBot || defaultBot(state.bots, state.profile).id;
   const side = useMemo(() => {
     const q = query.trim().toLowerCase();
     return state.threads
@@ -51,6 +48,12 @@ export function ChatsDrawer() {
       .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
   }, [state.threads, query]);
   const chatHere = state.tab === "chat";
+
+  // a staff bot's chat is the one chat it owns: its face and name go on the row
+  const staffOf = (th: ThreadMeta): Bot | null => {
+    const bot = th.bot_id ? state.bots.find((b) => b.id === th.bot_id) : undefined;
+    return bot && !isChief(bot) ? bot : null;
+  };
 
   const pick = (thread: string) => {
     openThread(thread);
@@ -61,9 +64,10 @@ export function ChatsDrawer() {
     setTab(tab);
     setDrawer(false);
   };
+  // a new chat is always with the chief; the staff bots are reached from the roster
   const create = async () => {
     try {
-      const created = await api.createThread(t("New chat"), botId);
+      const created = await api.createThread(t("New chat"));
       dispatch({ type: "ws", msg: { kind: "thread", thread: created } });
       pick(created.id);
     } catch (e) {
@@ -109,6 +113,7 @@ export function ChatsDrawer() {
               <SideRow
                 key={th.id}
                 thread={th}
+                bot={staffOf(th)}
                 selected={chatHere && state.activeThread === th.id}
                 confirming={confirm === th.id}
                 onPick={() => pick(th.id)}
@@ -121,10 +126,7 @@ export function ChatsDrawer() {
           </ul>
         )}
 
-        {/* who a new chat is with, then the bottom strip: settings · search · new */}
-        <div className="px-3.5 pt-1">
-          <BotPicker bots={state.bots} value={botId} onChange={setPickedBot} />
-        </div>
+        {/* the bottom strip: settings · search · new */}
         <div className="flex items-center gap-2 border-t border-border px-3 pt-2 pb-2">
           <button type="button" onClick={() => go("you")} aria-label={t("Settings")} className="flex h-10 w-10 items-center justify-center rounded-full text-fg hover:bg-surface-2">
             <Settings size={20} />
@@ -172,6 +174,7 @@ function Row({ icon, label, detail, selected, onClick }: { icon: ReactNode; labe
 
 function SideRow({
   thread,
+  bot,
   selected,
   confirming,
   onPick,
@@ -180,6 +183,8 @@ function SideRow({
   onKeep,
 }: {
   thread: ThreadMeta;
+  /** the staff bot whose one chat this is, when the row is a staff bot's */
+  bot: Bot | null;
   selected: boolean;
   confirming: boolean;
   onPick: () => void;
@@ -204,7 +209,11 @@ function SideRow({
   return (
     <li className={cx("group mx-2 flex items-center gap-2 rounded-2xl px-3", selected ? "bg-surface-2" : "hover:bg-surface-2/60")}>
       <button type="button" onClick={onPick} className="flex min-w-0 flex-1 items-center gap-2 py-2.5 text-left">
-        <span className="min-w-0 flex-1 truncate text-[15px]">{thread.title || t("New chat")}</span>
+        {bot && <Avatar profile={bot} size={24} still />}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px]">{thread.title || t("New chat")}</span>
+          {bot && bot.name !== thread.title && <span className="block truncate text-[11px] leading-tight text-muted">{bot.name}</span>}
+        </span>
         {thread.busy && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400" />}
         <span className="shrink-0 text-[12px] text-muted">{relativeDay(thread.updated_at)}</span>
       </button>
