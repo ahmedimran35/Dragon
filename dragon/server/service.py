@@ -36,7 +36,10 @@ from dragon.llm import session as llm_session
 from dragon.llm.factory import llm_ready
 from dragon.logger import logger
 from dragon.memory.consolidate import TidyReport, tidy
+from dragon.memory.store import MemoryItem, similarity
 from dragon.private import keep_private
+from dragon.reflector import LESSONS_PER_PASS, REFLECT_PROMPT, lesson_line, parse_lessons
+from dragon.reflector import json_objects as _json_objects
 from dragon.reminders import Reminder
 from dragon.schema import Attachment, Message, Role
 from dragon.sentinel.grants import normalize_scope
@@ -111,6 +114,8 @@ FEED_DEFAULT_TIME = "08:00"  # the daily routine, local time (contract C5)
 FEED_MIN_GAP_HOURS = 4  # a batch asked for by hand shortly before the hour counts as the day's
 FEED_RETRY_S = 3600  # after a failed batch (the model down), the next try an hour later
 FEED_KEEP = 200
+# the reflector: one pass at most this often after a run (seconds)
+REFLECT_MIN_GAP_S = 600
 _FEED_TIME = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
 
@@ -346,6 +351,8 @@ class DragonService:
         self.chatgpt = ChatGPTSignIn(self)
         self.coding = CodingService(self)
         self.app.tools.add(CodingAgents(coding=self.coding))
+        # a reflection pass at most one at a time
+        self._reflecting = False
         self.token = self._load_token()
         self._scheduler: asyncio.Task[None] | None = None
         # webhook deliveries accepted, by trigger id (monotonic seconds): the rate limit's
@@ -1100,6 +1107,7 @@ class DragonService:
         if not purpose:
             self._firstrun_turn_ended(thread.id, final)
         self._task_run_finished(thread.id)
+        self._maybe_reflect()
 
     # ------------------------------------------------------------------ approvals
     def decide(
@@ -2235,6 +2243,129 @@ class DragonService:
             self._save_tasks(state)
             self.bus.publish({"kind": "tasks"})
 
+    # ------------------------------------------------------------------ reflection
+    def _lessons(self) -> list[str]:
+        """What the reflector has kept so far, so the prompt does not repeat itself."""
+        if self.app.memory is None:
+            return []
+        return [m.content for m in self.app.memory.all() if m.source == "reflection"]
+
+    def _trajectory(self, since: str) -> str:
+        """What happened lately, in lines the reflector can chew: what was asked, which
+        tools ran and how they went, the last words, and what the tasks' log recorded."""
+        lines: list[str] = []
+        for thread in self.visible_threads():
+            for ev in thread.timeline.events:
+                ts = str(ev.get("ts") or "")
+                if since and ts and ts < since:
+                    continue
+                kind = ev.get("type")
+                if kind == "user":
+                    lines.append(f"- asked: {str(ev.get('text', ''))[:160]}")
+                elif kind == "tool":
+                    lines.append(
+                        f"- tool {ev.get('tool')} ({ev.get('status')}): "
+                        f"{str(ev.get('summary') or '')[:120]}"
+                    )
+                elif kind == "assistant" and ev.get("final"):
+                    lines.append(f"- replied: {str(ev.get('text', ''))[:120]}")
+                elif kind == "notice":
+                    lines.append(f"- note: {str(ev.get('text', ''))[:120]}")
+        for task in self._tasks_state()["tasks"]:
+            for attempt in task.get("attempts", []):
+                if since and str(attempt.get("at") or "") < since:
+                    continue
+                lines.append(
+                    f"- task {str(task.get('title', ''))[:60]}: {attempt.get('action')} "
+                    f"({attempt.get('outcome')})"
+                )
+        return "\n".join(lines[-60:])
+
+    async def reflect_now(self) -> list[MemoryItem]:
+        """One reflection pass: what happened lately becomes at most a few durable
+        lessons, kept in memory beside everything else it knows, under the words they
+        should surface for."""
+        if self.app.memory is None or not self.settings.agent.reflect:
+            return []
+        trajectory = self._trajectory(self.app.memory.get_meta("reflected_at"))
+        if "- asked:" not in trajectory:
+            return []  # nothing the user asked for: nothing to learn from
+        prompt = REFLECT_PROMPT.format(
+            name=self.profile.name,
+            n=LESSONS_PER_PASS,
+            language="the same language as the trajectory above"
+            if self.settings.agent.language in ("", "auto")
+            else self.settings.agent.language,
+            trajectory=trajectory,
+            known="\n".join(f"- {c}" for c in self._lessons()[:20]) or "(none)",
+        )
+        with llm_session.run("feed"):
+            response = await self.app.llm.ask_complete([Message.user(prompt)], tools=None)
+        known = self.app.memory.all()
+        written: list[MemoryItem] = []
+        for lesson in parse_lessons(response.content or ""):
+            line = lesson_line(lesson)
+            if any(similarity(line, m.content) >= 0.6 for m in known):
+                continue  # the same lesson, kept already
+            written.append(self.app.memory.add(line, category="lesson", source="reflection"))
+        self.app.memory.set_meta("reflected_at", now_iso())
+        if written:
+            self.bus.publish({"kind": "memory"})
+            self._announce_lessons(written)
+        return written
+
+    def _announce_lessons(self, items: list[MemoryItem]) -> None:
+        """What the reflector kept, said once in the chat: the person sees it getting
+        sharper and can correct it on the Memory page."""
+        self.ui.emit(
+            {
+                "type": "notice",
+                "level": "info",
+                "text": "Learned",
+                "source": "memory",
+                "thread": MAIN_THREAD,
+            }
+        )
+        self.ui.emit(
+            {
+                "type": "assistant",
+                "text": "I learned:\n" + "\n".join(f"- {m.content}" for m in items),
+                "thread": MAIN_THREAD,
+                "source": "background",
+                "about": "Learned",
+                "final": True,
+            }
+        )
+        self.threads[MAIN_THREAD].updated_at = now_iso()
+
+    def _maybe_reflect(self) -> None:
+        """Ask the reflector after a run, at most one pass in a while. It is quiet work:
+        it never gets in the way of the run that just ended, and a mock model (a test's
+        scripted turns) is never asked to do it."""
+        if (
+            not self.settings.agent.reflect
+            or self.app.memory is None
+            or self._reflecting
+            or getattr(self.app.llm, "is_mock", False)
+        ):
+            return
+        floor = (datetime.now(UTC) - timedelta(seconds=REFLECT_MIN_GAP_S)).isoformat(
+            timespec="milliseconds"
+        )
+        if self.app.memory.get_meta("reflected_at") > floor:
+            return
+        self._reflecting = True
+
+        async def pass_() -> None:
+            try:
+                await self.reflect_now()
+            except Exception as exc:  # noqa: BLE001 - reflection must never bother anyone
+                logger.warning("reflection failed: {}", exc)
+            finally:
+                self._reflecting = False
+
+        spawn(pass_(), "reflection")
+
     # ------------------------------------------------------------------ feed posts
     def _feed_file(self) -> Path:
         return self.data_dir / "feed_posts.json"
@@ -2786,38 +2917,6 @@ def goal_to_dict(g: Goal) -> dict[str, Any]:
             for s in g.steps
         ],
     }
-
-
-def _json_objects(text: str) -> list[Any]:
-    """The JSON objects in a model reply that should have been a JSON array.
-
-    Usually it is one: ``[{...}, {...}]``, possibly inside a code fence. When the
-    array does not parse — a real newline inside a string, a trailing comma, the
-    reply cut off at max_tokens before the closing bracket — each ``{...}`` that
-    parses on its own is kept, so one bad item does not cost the whole list.
-    """
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
-    text = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text.strip())
-    start, end = text.find("["), text.rfind("]")
-    if start >= 0 and end > start:
-        try:
-            data = json.loads(text[start : end + 1], strict=False)
-            if isinstance(data, list):
-                return data
-        except json.JSONDecodeError:
-            pass
-    decoder = json.JSONDecoder(strict=False)
-    found: list[Any] = []
-    pos = text.find("{")
-    while pos >= 0:
-        try:
-            obj, stop = decoder.raw_decode(text, pos)
-        except json.JSONDecodeError:
-            pos = text.find("{", pos + 1)
-            continue
-        found.append(obj)
-        pos = text.find("{", stop)
-    return found
 
 
 def _task_from_item(item: Any) -> dict[str, Any] | None:

@@ -35,9 +35,12 @@ export function MemoryScreen() {
 
   const grouped = useMemo(() => {
     const map = new Map<string, MemoryItem[]>();
-    for (const m of items ?? []) map.set(m.category, [...(map.get(m.category) ?? []), m]);
+    for (const m of items ?? []) if (m.source !== "reflection") map.set(m.category, [...(map.get(m.category) ?? []), m]);
     return [...map.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [items]);
+
+  // what the reflector learned from what happened, kept apart from what was said to it
+  const lessons = useMemo(() => (items ?? []).filter((m) => m.source === "reflection"), [items]);
 
   const add = async () => {
     if (!content.trim()) return;
@@ -174,6 +177,29 @@ export function MemoryScreen() {
               {t("Tell {name} something to remember", { name })}
             </button>
           </div>
+        )}
+
+        {lessons.length > 0 && (
+          <section>
+            <div className="px-1 mb-2 text-[12px] font-semibold uppercase tracking-wide text-muted">
+              {t("What I've learned")} · {lessons.length}
+            </div>
+            <ul className="rounded-3xl bg-surface border border-border/70 shadow-sm divide-y divide-border/70 overflow-hidden">
+              {lessons.map((m) => (
+                <li key={m.id} className="flex items-start gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14.5px] leading-snug break-words">{m.content}</div>
+                    <div className="mt-0.5 text-[11.5px] text-muted">
+                      {t("learned from what happened")} · {relativeTime(m.created_at)}
+                    </div>
+                  </div>
+                  <button type="button" aria-label={t("Forget")} onClick={() => void forget(m)} className="p-1.5 text-muted hover:text-rose-500">
+                    <Trash2 size={17} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {grouped.map(([cat, list]) => (

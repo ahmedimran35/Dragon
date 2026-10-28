@@ -2402,6 +2402,49 @@ def test_browser_frames_are_capped_but_keep_the_trail(server):
     assert ui.browser_frame("main", card["frame"]) is not None
 
 
+async def test_the_reflector_turns_what_happened_into_lessons(server):
+    client, svc, llm = server
+    # park the automatic post-run pass: this test drives the pass by hand
+    svc.app.memory.set_meta("reflected_at", "2999-01-01T00:00:00.000+00:00")
+    # a run with tools behind it: something happened worth learning from
+    client.post("/api/threads/main/send", json={"text": "find me a dentist"})
+    wait_idle(svc)
+    svc.app.memory.set_meta("reflected_at", "")
+    llm.script.append(
+        LLMResponse(
+            content='[{"content": "The user prefers morning appointments", '
+            '"applies": "booking anything", "about": "appointments, morning"}]'
+        )
+    )
+    written = await svc.reflect_now()
+    assert [m.content for m in written] == [
+        "The user prefers morning appointments (when: booking anything)"
+    ]
+    kept = client.get("/api/memory").json()
+    assert any(m["source"] == "reflection" and "morning appointments" in m["content"] for m in kept)
+
+    # the same lesson is not kept twice, whatever words it comes back in
+    svc.app.memory.set_meta("reflected_at", "")
+    llm.script.append(
+        LLMResponse(
+            content='[{"content": "The user prefers morning appointments", '
+            '"applies": "booking anything", "about": "other words"}]'
+        )
+    )
+    assert await svc.reflect_now() == []
+
+    # the pass is throttled (a recent pass is not repeated) and can be switched off
+    svc.app.llm.is_mock = False
+    svc._maybe_reflect()
+    assert svc._reflecting is False, "a recent pass is not repeated"
+    svc.app.llm.is_mock = True
+    svc.settings.agent.reflect = False
+    llm.script.append(
+        LLMResponse(content='[{"content": "Something new", "applies": "", "about": ""}]')
+    )
+    assert await svc.reflect_now() == []
+
+
 def _chromium_available() -> bool:
     try:
         from playwright.sync_api import sync_playwright

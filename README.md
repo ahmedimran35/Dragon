@@ -48,7 +48,7 @@ dragon serve
 |---|---|
 | **Chat and tasks** | Multi-step agent runs with tools: files, shell, web search, browser, calendar, contacts, email and more |
 | **Goals, reminders, triggers** | Long-term goals it advances on a timer; reminders and routines; mail polls and webhooks that start work |
-| **Memory** | Notes it keeps about you and your projects, recalled by keyword or by meaning |
+| **Memory** | Notes it keeps about you and your projects, recalled by keyword or by meaning; the reflector turns what happens into durable lessons, shown on the Memory page |
 | **Sentinel approvals** | Sensitive actions become approval cards in the web app; everything is in the audit log |
 | **Browser & hands** | Playwright browser automation; screen/mouse/keyboard on the machine the runtime runs on |
 | **Channels** | Talk to Ember from Feishu, DingTalk, WeCom or Telegram |

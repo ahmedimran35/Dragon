@@ -13,6 +13,9 @@ Script = LLMResponse | Callable[[list[Message]], LLMResponse]
 
 class MockLLM(BaseLLM):
     name = "mock"
+    # the marker the runtime looks for before it spends this model's turns on quiet
+    # background work (the reflector); scripted turns belong to the test that queued them
+    is_mock = True
 
     def __init__(self, script: list[Script] | None = None):
         self.script: list[Script] = list(script or [])

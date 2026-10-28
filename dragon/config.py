@@ -218,6 +218,9 @@ class AgentSettings(BaseModel):
     extra_roots: list[Path] = Field(default_factory=list)
     # "auto" → answer in the user's language; or force e.g. "zh" / "en".
     language: str = "auto"
+    # The reflector: a quiet pass after a run that turns what happened into durable
+    # lessons kept in memory (and shown on the Memory page).
+    reflect: bool = True
     max_context_messages: int = 80
     # How many of the newest image-bearing messages keep their pictures in a model request.
     # A hands session adds a screenshot or two per step, and the whole conversation goes up

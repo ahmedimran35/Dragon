@@ -5,6 +5,13 @@ All notable changes to Dragon are recorded here. The format follows
 
 ## [Unreleased]
 
+- The reflector: after a run, a quiet pass reviews what happened (what you asked, which
+  tools ran and how it went, what the tasks recorded) and keeps at most a few durable
+  lessons in memory: a preference you showed, a fact about a site, something that failed
+  and why. Lessons are recalled like any memory when they fit, said once in the chat as
+  "Learned", and listed under *What I've learned* on the Memory page where you can
+  correct or forget them. One pass at most every ten minutes; `[agent] reflect = false`
+  turns it off.
 - The chat model card under Connections is easier to get through and better looking: it
   opens with a readiness panel (a tick per thing already set: provider, model, key), then
   the provider, model and key as titled sections with Save and Test right there. The model

@@ -237,6 +237,10 @@ const zhCN: Record<string, string> = {
   reopened: "已重新打开",
   finished: "已结束",
 
+  // ── The reflector: what it learned ────────────────────────────────────────────────
+  "What I've learned": "我学到的",
+  "learned from what happened": "从发生过的事中学到",
+
   // ── Connections: the chat model card ──────────────────────────────────────────────
   "Three things make the chat work: a provider, a model and its key.": "让聊天跑起来需要三样：服务商、模型和密钥。",
   "More settings": "更多设置",

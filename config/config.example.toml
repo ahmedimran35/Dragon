@@ -16,6 +16,7 @@ max_steps = 30                 # the most one request may take before the agent 
 # workspace = "./workspace"    # the agent's files. Default: ./workspace when the current directory has one, else <data_dir>/workspace
 extra_roots = []               # directories outside the workspace the files tool may use, e.g. ["~/Documents/notes"]
 language = "auto"              # "auto" | "zh" | "en" | ...
+reflect = true                 # learn durable lessons from what happens, kept in memory
 max_context_messages = 80      # how much of the conversation is resent each turn
 max_context_images = 4         # newest N screenshots kept in the request; older ones become a note (0 keeps all)
 show_thinking = false          # show the model's reasoning in the web app
