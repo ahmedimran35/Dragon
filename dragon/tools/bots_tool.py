@@ -4,7 +4,7 @@ Every bot's tool collection contains this tool — the boundary is the runtime c
 the schema: the call refuses unless the bot whose turn is running is the chief of staff
 (:func:`dragon.bots.running_bot_id`), so a staff bot that tries is answered with one
 sentence and nothing changes. The tool works through ``DragonService``'s bot methods —
-the same code path as ``/api/bots`` — so deleting a bot reassigns its chat to the chief
+the same code path as ``/api/bots`` — so deleting a bot closes its chat
 and the chief's identity keeps mirroring into the profile.
 """
 
@@ -58,7 +58,7 @@ class Bots(BaseTool):
         "avatar, emoji, color, tagline, tone, communication, style, instructions: a new "
         "staff bot and its brief), `update` (bot_id plus any field to change; pass "
         "`instructions` to give a bot a new brief), `delete` (bot_id: remove a staff bot; "
-        "its chat falls back to the chief). Every bot you create is staff; the chief of "
+        "its chat goes with it). Every bot you create is staff; the chief of "
         "staff cannot be deleted."
     )
     parameters: dict[str, Any] = {
@@ -201,7 +201,7 @@ class Bots(BaseTool):
                     return ToolResult.fail(CHIEF_KEEPS)
                 had_chat = any(t.bot_id == bot_id for t in svc.visible_threads())
                 svc.delete_bot(bot_id)
-                note = " Its chat now speaks as the chief of staff." if had_chat else ""
+                note = " Its chat went with it." if had_chat else ""
                 return ToolResult(output=f"Removed {bot['name']} from the roster.{note}")
             return ToolResult.fail(f"unknown action '{action}'")
         except KeyError:

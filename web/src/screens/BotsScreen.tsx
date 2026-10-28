@@ -279,6 +279,7 @@ export function BotsScreen() {
                 busy={busy}
                 error={error}
                 confirming={confirming}
+                hasChat={Boolean(state.threads?.some((th) => th.bot_id === editing.id))}
                 ids={ids}
                 onIdentity={setIdentity}
                 onInstructions={(instructions) => setEditing((e) => (e ? { ...e, instructions } : e))}
@@ -339,6 +340,7 @@ function EditorPanel({
   busy,
   error,
   confirming,
+  hasChat,
   ids,
   onIdentity,
   onInstructions,
@@ -354,6 +356,7 @@ function EditorPanel({
   busy: boolean;
   error: string | null;
   confirming: boolean;
+  hasChat: boolean;
   ids: string;
   onIdentity: (identity: Identity) => void;
   onInstructions: (instructions: string) => void;
@@ -505,7 +508,9 @@ function EditorPanel({
       )}
       {editing.id && confirming && (
         <div className="flex shrink-0 items-center gap-2 border-t border-rose-500/25 bg-rose-500/10 px-5 py-3">
-          <span className="min-w-0 flex-1 text-[13px]">{t("Delete this bot?")}</span>
+          <span className="min-w-0 flex-1 text-[13px]">
+            {hasChat ? t("Delete this bot and its chat?") : t("Delete this bot?")}
+          </span>
           <button
             type="button"
             disabled={busy}

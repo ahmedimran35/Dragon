@@ -598,11 +598,14 @@ class DragonService:
 
     def delete_bot(self, bot_id: str) -> None:
         """Remove a bot (:class:`ValueError` when refused: the default bot and the last
-        bot always stay). Its threads fall back to the default bot."""
+        bot always stay). Its chat goes with it; only a chat that cannot go, like the
+        main chat, falls back to the default bot."""
         self.bots.delete(bot_id)
         fallback = self.bots.get(self.default_bot_id) or {}
-        for t in self.threads.values():
-            if t.bot_id == bot_id:
+        for t in list(self.threads.values()):
+            if t.bot_id != bot_id:
+                continue
+            if not self.delete_thread(t.id):
                 t.bot_id = self.default_bot_id
                 t.agent.bot = dict(fallback)
         self._save_index()

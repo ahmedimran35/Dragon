@@ -50,8 +50,8 @@ chief has many, staff bots have one.
 
 Open **Bots** from the sidebar rail or the roster's "Manage", or just tell the chief. The
 page shows the roster beside the bot you picked: its face, voice and instructions. The
-default bot cannot be forgotten — it is the chief. Forgetting a bot hands its chat to the
-chief.
+default bot cannot be forgotten — it is the chief. Forgetting a bot closes its chat for
+good.
 
 ## Approvals and the log
 

@@ -334,11 +334,10 @@ def test_a_staff_bot_gets_one_thread_and_the_chief_gets_many(settings: Settings)
     assert fresh.id != first.id
 
 
-def test_delete_bot_reassigns_its_threads(settings: Settings):
+def test_delete_bot_takes_its_chat_with_it(settings: Settings):
     service = DragonService(settings, llm=MockLLM([]))
     made = service.create_bot({"name": "Scout", "tone": "concise"})
     thread = service.create_thread("trip", bot_id=made["id"])
-    default_name = service.list_bots()[0]["name"]
 
     with pytest.raises(ValueError):  # the default bot always stays
         service.delete_bot(DEFAULT_BOT_ID)
@@ -347,11 +346,13 @@ def test_delete_bot_reassigns_its_threads(settings: Settings):
 
     service.delete_bot(made["id"])
     assert [b["id"] for b in service.list_bots()] == [DEFAULT_BOT_ID]
-    assert service.threads[thread.id].bot_id == DEFAULT_BOT_ID
-    assert service.threads[thread.id].agent.bot["name"] == default_name
-    assert service.bot_of_thread(thread.id)["id"] == DEFAULT_BOT_ID
+    # the bot's chat goes with it — nothing of it stays in the list or on disk
+    assert thread.id not in service.threads
+    assert not (settings.data_dir / "threads" / f"{thread.id}.json").exists()
     index = json.loads((settings.data_dir / "threads" / "index.json").read_text("utf-8"))
-    assert next(m for m in index if m["id"] == thread.id)["bot_id"] == DEFAULT_BOT_ID
+    assert all(m["id"] != thread.id for m in index)
+    again = DragonService(settings, llm=MockLLM([]))
+    assert thread.id not in again.threads
 
 
 # ----------------------------------------------------------------------------- memory

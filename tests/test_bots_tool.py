@@ -110,15 +110,15 @@ async def test_create_and_update_go_through_the_service(service):
     assert out.ok and service.profile.name == "Wren"
 
 
-async def test_delete_removes_a_staff_bot_and_reassigns_its_chat(service):
+async def test_delete_removes_a_staff_bot_and_its_chat(service):
     made = service.create_bot({"name": "Scout"})
     thread = service.create_thread("Scout chat", bot_id=made["id"])
     out = await service.app.tools.execute("bots", {"action": "delete", "bot_id": made["id"]})
     assert out.ok and "Removed Scout from the roster." in out.output
+    assert "Its chat went with it." in out.output
     assert [b["id"] for b in service.list_bots()] == ["default"]
-    # the same code path as the API: the chat falls back to the chief
-    assert service.threads[thread.id].bot_id == "default"
-    assert service.bot_of_thread(thread.id)["id"] == "default"
+    # the same code path as the API: the chat goes when the bot goes
+    assert thread.id not in service.threads
 
 
 # ----------------------------------------------------------------------------- risk & card

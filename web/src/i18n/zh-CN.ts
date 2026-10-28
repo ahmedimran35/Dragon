@@ -1451,6 +1451,7 @@ const zhCN: Record<string, string> = {
   "What this bot is for, and how it should do it.": "这个机器人负责什么，以及该怎么做。",
   "Delete bot": "删除机器人",
   "Delete this bot?": "删除这个机器人？",
+  "Delete this bot and its chat?": "删除这个机器人及其对话？",
   Deleted: "已删除",
   "Bot for the new chat": "新对话使用的机器人",
   "Its own face, voice and job.": "自己的形象、说话方式和职责。",

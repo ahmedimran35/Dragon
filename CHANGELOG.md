@@ -14,7 +14,8 @@ All notable changes to Dragon are recorded here. The format follows
   bot that asked, and the audit log records which bot acted.
 - The default bot is your chief of staff, marked as such wherever it appears. It runs the
   roster by asking in chat: create a staff bot, edit one, brief it, or remove one (removal
-  asks first). Staff bots cannot touch the roster, and the chief cannot remove itself. The
+  asks first, and takes its chat with it). Staff bots cannot touch the roster, and the
+  chief cannot remove itself. The
   chief keeps as many chats as it likes; each staff bot gets exactly one chat of its own,
   which opens when you tap the bot. Making a bot suggests faces the others do not wear, so
   no two bots look the same.
