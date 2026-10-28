@@ -4,10 +4,12 @@ from pathlib import Path
 
 import pytest
 
+from dragon import config as config_module
 from dragon.config import Settings, load_settings
 
 
 def test_env_expansion_and_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(config_module, "DEFAULT_DATA_DIR", tmp_path / "home")  # not ~/.dragon
     cfg = tmp_path / "config.toml"
     cfg.write_text(
         """
@@ -86,6 +88,7 @@ def test_missing_explicit_config_raises(tmp_path: Path):
 
 def test_defaults_without_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config_module, "DEFAULT_DATA_DIR", tmp_path / "home")  # not ~/.dragon
     monkeypatch.delenv("DRAGON_CONFIG", raising=False)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-from-env")
     monkeypatch.setenv("HOME", str(tmp_path))

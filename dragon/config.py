@@ -601,7 +601,9 @@ class ServerSettings(BaseModel):
 
 
 class Settings(BaseModel):
-    data_dir: Path = DEFAULT_DATA_DIR
+    # Resolved when the settings are built (not at import), so the suite's
+    # ``DEFAULT_DATA_DIR`` patching isolates every load from the developer's ~/.dragon.
+    data_dir: Path = Field(default_factory=lambda: DEFAULT_DATA_DIR)
     log_level: str = "INFO"
     llm: LLMSettings = Field(default_factory=LLMSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
