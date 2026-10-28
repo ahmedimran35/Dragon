@@ -49,10 +49,13 @@ export default function App() {
   const { state, setTab } = useStore();
   const t = useT();
 
-  // The document title follows the agent's name.
+  // The document title follows the agent's name — no second "Dragon" when the name
+  // already carries it ("Ember Dragon" stays "Ember Dragon", not "Ember Dragon · Dragon").
   useEffect(() => {
     const name = state.profile?.name?.trim();
-    document.title = name && name.toLowerCase() !== "dragon" ? `${name} · Dragon` : "Dragon";
+    document.title = !name || name.toLowerCase().includes("dragon")
+      ? name || "Dragon"
+      : `${name} · Dragon`;
   }, [state.profile?.name]);
 
   // `#connections` etc. opens a section straight away (`#ideas` is Tasks' old name).

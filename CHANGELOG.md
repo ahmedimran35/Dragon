@@ -19,6 +19,8 @@ All notable changes to Dragon are recorded here. The format follows
   chief keeps as many chats as it likes; each staff bot gets exactly one chat of its own,
   which opens when you tap the bot. Making a bot suggests faces the others do not wear, so
   no two bots look the same.
+- The window title no longer doubles the word Dragon in a name like "Ember Dragon"
+  (it read "Ember Dragon · Dragon"; it reads "Ember Dragon").
 - The reflector: after a run, a quiet pass reviews what happened (what you asked, which
   tools ran and how it went, what the tasks recorded) and keeps at most a few durable
   lessons in memory: a preference you showed, a fact about a site, something that failed
