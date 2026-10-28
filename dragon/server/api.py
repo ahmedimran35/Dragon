@@ -1812,7 +1812,18 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
                 return FileResponse(candidate)
             index = STATIC_DIR / "index.html"
             if index.is_file():
-                return FileResponse(index, headers={"Cache-Control": "no-cache"})
+                return FileResponse(
+                    index,
+                    headers={
+                        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                        "Pragma": "no-cache",
+                        "Expires": "0",
+                        # keep CDNs (Cloudflare tunnels, reverse proxies) from caching the
+                        # app shell, so a new build is seen on the very next request
+                        "CDN-Cache-Control": "no-store",
+                        "Surrogate-Control": "no-store",
+                    },
+                )
             raise HTTPException(404)
 
     else:

@@ -2921,7 +2921,7 @@ def test_static_app_caching_headers(server):
     r = plain.get(f"/assets/{asset.name}")
     assert r.status_code == 200
     assert r.headers["cache-control"] == "public, max-age=31536000, immutable"
-    assert plain.get("/").headers["cache-control"] == "no-cache"
+    assert plain.get("/").headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
     assert plain.get("/sw.js").headers["cache-control"] == "no-cache"
     # the app's own routes, not the HTML, answer a wrong API path
     r = plain.get("/api/no-such-thing")
