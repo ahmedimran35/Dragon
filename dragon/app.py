@@ -315,8 +315,12 @@ class DragonApp:
         gui = self.settings.gui
 
         async def app_gate(app_id: str, label: str) -> bool:
-            # "Let <Dragon> use <App>?" — the agent's name as the person set it
-            dragon = str(self.settings.agent.name or "Dragon")
+            # "Let <bot> use <App>?" — the bot the run speaks as when it has one,
+            # else the agent's name as the config has it
+            from dragon.bots import running_bot
+
+            bot = running_bot()
+            dragon = str((bot or {}).get("name") or self.settings.agent.name or "Dragon")
             return await self.sentinel.allow_app(app_id, label, dragon)
 
         act = ComputerAct(link=self.computer, gui=gui, holds=self.holds, app_gate=app_gate)

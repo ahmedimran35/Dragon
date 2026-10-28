@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { dragonClipUrl, dragonUrl, isDragon, studioClipUrl, studioUrl } from "../avatars";
 import { useT } from "../i18n";
-import { useMood } from "../mood";
-import type { Profile, Status } from "../types";
+import { useMood, type Mood } from "../mood";
+import type { Bot, Profile, Status } from "../types";
 import { cx } from "../util";
 
 /**
@@ -25,16 +25,20 @@ const reducedMotion = typeof window !== "undefined" && typeof window.matchMedia 
 export function Avatar({
   profile,
   status,
+  mood: moodGiven,
   size = 40,
   onClick,
   still = false,
   className,
 }: {
-  profile: Profile | null;
+  /** the face to wear: the runtime's profile or a bot's persona */
+  profile: Profile | Bot | null;
   status?: Status;
+  /** the pose to hold, where the caller knows it (the roster's per-bot presence); otherwise the mood follows `status` */
+  mood?: Mood;
   size?: number;
   onClick?: () => void;
-  /** no idle animation (lists, pickers) */
+  /** no motion and no clip (lists, pickers); the pose still follows the mood */
   still?: boolean;
   className?: string;
 }) {
@@ -47,14 +51,16 @@ export function Avatar({
     return () => window.clearTimeout(id);
   }, [wiggle]);
 
-  const mood = useMood(status);
+  const followed = useMood(status);
+  const mood = moodGiven ?? followed;
   const state = status?.state ?? "idle";
-  const color = profile?.color ?? "#0064d4";
-  // the dragon is the default: no profile yet, or a profile that names it (or a retired face)
-  const dragon = !profile || isDragon(profile.avatar);
+  const color = profile?.color || "#0064d4";
+  // the dragon is the default: no profile yet, or a profile that names it (or a retired face);
+  // "" is the emoji on a colour, the look the picker sets when the dragon is not wanted
+  const dragon = !profile || (!!profile.avatar && isDragon(profile.avatar));
   // a face from the studio: anything else that is not the emoji
   const studio = !dragon && profile?.avatar ? profile.avatar : null;
-  const pose = wiggle ? "happy" : still ? "idle" : mood;
+  const pose = wiggle ? "happy" : mood;
   // the clip for this pose, when one may exist and is wanted here
   const clipCandidate = still || reducedMotion || size < CLIP_MIN_PX ? null : dragon ? dragonClipUrl(pose) : studio ? studioClipUrl(studio, pose) : null;
   const clip = clipCandidate && !noClip.has(clipCandidate) ? clipCandidate : null;
@@ -97,7 +103,7 @@ export function Avatar({
           <img src={stillUrl} alt="" draggable={false} className="h-full w-full object-cover" />
         ) : (
           <span className="flex h-full w-full items-center justify-center leading-none drop-shadow-sm" style={{ fontSize: size * 0.5 }}>
-            {profile?.emoji ?? "✨"}
+            {profile?.emoji || "✨"}
           </span>
         )}
       </span>

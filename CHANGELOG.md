@@ -5,6 +5,13 @@ All notable changes to Dragon are recorded here. The format follows
 
 ## [Unreleased]
 
+- Bots: the agent beside you is now one of a roster. Each bot has its own name, face, tone,
+  style and standing instructions, its own memories, and its own chats — start a chat with
+  any bot from the picker, and its face and name follow the conversation. A sidebar roster
+  shows each bot's face and what it is up to. The bot you already have becomes the default
+  one and keeps everything it knew; the persona you set stays put. Bots are managed from
+  the new Bots page: make one, give it a face and a voice, rename or forget it. Approval
+  cards name the bot that asked, and the audit log records which bot acted.
 - The reflector: after a run, a quiet pass reviews what happened (what you asked, which
   tools ran and how it went, what the tasks recorded) and keeps at most a few durable
   lessons in memory: a preference you showed, a fact about a site, something that failed

@@ -1,12 +1,16 @@
-import { Bug, Globe, LayoutGrid, ListChecks, Menu, MessageCircle, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, Wrench, X } from "lucide-react";
+import { Bug, Globe, LayoutGrid, ListChecks, Menu, MessageCircle, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, Users, Wrench, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
+import { api } from "../api";
+import { defaultBot } from "../bots";
 import { useDeveloperTools } from "../devtools";
 import { useT } from "../i18n";
 import { ThreadList } from "../screens/ChatScreen";
 import { DragonSheet } from "../screens/DragonSheet";
 import { useStore, type Tab } from "../store";
+import type { Bot } from "../types";
 import { cx } from "../util";
 import { Avatar } from "./Avatar";
+import { BotRoster } from "./BotRoster";
 import { useMenuKeys } from "./useMenuKeys";
 
 /** Where a bug goes. Empty: this deployment has no public issue tracker yet
@@ -23,7 +27,7 @@ function bugReportUrl(_version: string): string {
  * screens as the narrow layout; nothing here is a second implementation of anything.
  */
 export function Sidebar() {
-  const { state, setTab, openThread, setBrowserOpen } = useStore();
+  const { state, setTab, openThread, setBrowserOpen, dispatch, toast } = useStore();
   const t = useT();
   const [activityOpen, setActivityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -32,6 +36,19 @@ export function Sidebar() {
   const developer = useDeveloperTools();
   const { profile, status } = state;
   const name = profile?.name ?? "Dragon";
+  // the roster: the bots the runtime sent, else the stand-in that wears the profile's face
+  const bots = state.bots.length > 0 ? state.bots : [defaultBot(state.bots, profile)];
+
+  // a tap on a roster row opens a new chat with that bot
+  const newChat = async (bot: Bot) => {
+    try {
+      const created = await api.createThread(t("New chat"), bot.id);
+      dispatch({ type: "ws", msg: { kind: "thread", thread: created } });
+      openThread(created.id);
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
 
   const pendingApprovals = state.pendingApprovals.length;
   const proposals = state.goals.filter((g) => g.proposal && g.status !== "cancelled").length;
@@ -55,6 +72,7 @@ export function Sidebar() {
     { id: "tasks", label: "Tasks", icon: <ListChecks size={21} />, badge: pendingApprovals + proposals },
     { id: "goals", label: "Goals", icon: <SquareCheckBig size={21} />, badge: proposals },
     { id: "library", label: "Library", icon: <LayoutGrid size={21} /> },
+    { id: "bots", label: "Bots", icon: <Users size={21} /> },
     ...(developer ? [{ id: "coding" as Tab, label: "Coding", icon: <TerminalSquare size={21} /> }] : []),
   ];
 
@@ -170,7 +188,18 @@ export function Sidebar() {
         <section className="flex h-full w-[248px] shrink-0 flex-col border-r border-border bg-surface/40" aria-label={t("Chats")}>
           <div className="titlebar-room" />
           <div className="px-3 pb-2 pt-4">
-            <h2 className="px-1 text-[15px] font-semibold tracking-tight">{t("Chats")}</h2>
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-[15px] font-semibold tracking-tight">{t("Bots")}</h2>
+              <button
+                type="button"
+                onClick={() => setTab("bots")}
+                className="rounded-full px-2 py-0.5 text-[11.5px] font-medium text-accent hover:bg-surface-2"
+              >
+                {t("Manage")}
+              </button>
+            </div>
+            <BotRoster bots={bots} presence={state} onPick={(bot) => void newChat(bot)} className="mt-1.5" />
+            <h2 className="mt-4 px-1 text-[15px] font-semibold tracking-tight">{t("Chats")}</h2>
             <label className="mt-2 flex items-center gap-2 rounded-xl bg-surface-2 px-2.5 py-1.5 text-muted focus-within:ring-2 focus-within:ring-accent/40">
               <Search size={14} className="shrink-0" />
               <input

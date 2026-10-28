@@ -16,6 +16,7 @@ Start here:
 | [security.md](security.md) | Token model, vault, Sentinel, sandbox, egress |
 | [architecture.md](architecture.md) | How one turn works, the module map |
 | [avatar.md](avatar.md) | The avatar studio (pictures and clips) |
+| [bots.md](bots.md) | Bots: personas, faces, and the roster |
 | [browser-and-hands.md](browser-and-hands.md) | Browser automation and computer hands |
 | [channels.md](channels.md) | Feishu, DingTalk, WeCom, Telegram |
 | [mcp.md](mcp.md) | MCP servers as tools |

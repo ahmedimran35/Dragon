@@ -1,7 +1,8 @@
 """HTTP + WebSocket API for the Dragon app (and anything else that wants to talk to your Dragon).
 
-    GET  /api/state                      snapshot: profile, status, threads, goals, settings
-    GET  /api/threads                    list threads          POST /api/threads {title}
+    GET  /api/state                      snapshot: profile, bots, status, threads, goals, settings
+    GET  /api/bots  POST /api/bots  PATCH|DELETE /api/bots/{id}   the personas a chat speaks as
+    GET  /api/threads                    list threads          POST /api/threads {title,bot_id}
     GET  /api/threads/{id}/events        timeline (?limit&before)
     POST /api/threads/{id}/send {text}   queue a message (non-blocking)
     POST /api/approvals/{id} {approved, scope, reason}
@@ -81,7 +82,7 @@ from dragon.config import Settings
 from dragon.fences import MAX_NAME
 from dragon.llm.chatgpt import ChatGPTError
 from dragon.logger import logger
-from dragon.server import data_export, tickets
+from dragon.server import data_export, firstrun, tickets
 from dragon.server.channels_api import install_channels
 from dragon.server.events import MAIN_THREAD
 from dragon.server.service import DragonService, goal_to_dict
@@ -111,6 +112,28 @@ class SendBody(BaseModel):
 
 class ThreadBody(BaseModel):
     title: str = ""
+    # the bot a new chat speaks as (POST /api/threads); the default bot when empty
+    bot_id: str = Field("", max_length=64)
+
+
+class BotBody(BaseModel):
+    """A bot's persona: any subset of its fields, ``None`` (or left out) meaning "keep what
+    is there" on PATCH. The id and the creation time come back, never go in."""
+
+    name: str | None = Field(default=None, max_length=60)
+    # the face: "dragon" (the built-in one), a studio face's id, or "" for the emoji
+    avatar: str | None = Field(default=None, max_length=40)
+    emoji: str | None = Field(default=None, max_length=8)
+    color: str | None = Field(default=None, max_length=20)
+    tagline: str | None = Field(default=None, max_length=200)
+    # how it talks: a tone (a key of TONES in dragon.server.service), a length or shape of
+    # reply (a key of COMMUNICATION) and free text
+    tone: str | None = Field(default=None, max_length=20)
+    communication: str | None = Field(default=None, max_length=20)
+    style: str | None = Field(default=None, max_length=2000)
+    instructions: str | None = Field(default=None, max_length=8000)
+    # the model this bot talks through; "" is the runtime default (stored, not yet used)
+    model: str | None = Field(default=None, max_length=200)
 
 
 class TaskActionBody(BaseModel):
@@ -521,6 +544,41 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
         version = svc.settings_view()["version"]
         return {"installed": version, "latest": version, "update": False}
 
+    # ------------------------------------------------------------------ bots
+    @app.get("/api/bots", dependencies=dep)
+    async def list_bots() -> dict[str, Any]:
+        """Every persona a chat can speak as; the first is the default bot."""
+        return {"bots": svc.list_bots()}
+
+    @app.post("/api/bots", dependencies=dep, status_code=201)
+    async def create_bot(body: BotBody) -> dict[str, Any]:
+        """A new bot from any subset of its fields; the rest take their defaults."""
+        try:
+            return {"bot": svc.create_bot(body.model_dump(exclude_none=True))}
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.patch("/api/bots/{bot_id}", dependencies=dep)
+    async def update_bot(bot_id: str, body: BotBody) -> dict[str, Any]:
+        """A partial change: only the fields given are written."""
+        try:
+            return {"bot": svc.update_bot(bot_id, body.model_dump(exclude_none=True))}
+        except KeyError:
+            raise HTTPException(404, "no such bot") from None
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/bots/{bot_id}", dependencies=dep)
+    async def delete_bot(bot_id: str) -> Response:
+        try:
+            svc.delete_bot(bot_id)
+        except ValueError as exc:
+            # the default bot and the last bot stay; the reason travels under "error"
+            return JSONResponse(status_code=400, content={"error": str(exc)})
+        except KeyError:
+            raise HTTPException(404, "no such bot") from None
+        return JSONResponse(content={"ok": True})
+
     # ------------------------------------------------------------------ threads & chat
     @app.get("/api/threads", dependencies=dep)
     async def list_threads() -> list[dict[str, Any]]:
@@ -529,7 +587,13 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
 
     @app.post("/api/threads", dependencies=dep)
     async def create_thread(body: ThreadBody) -> dict[str, Any]:
-        return svc.create_thread(body.title).meta()
+        """A new conversation; ``bot_id`` names the bot it speaks as (the default bot when
+        the body leaves it out)."""
+        try:
+            thread = svc.create_thread(body.title, bot_id=body.bot_id or svc.default_bot_id)
+        except KeyError:
+            raise HTTPException(404, "no such bot") from None
+        return thread.meta()
 
     @app.patch("/api/threads/{thread_id}", dependencies=dep)
     async def rename_thread(thread_id: str, body: ThreadBody) -> dict[str, Any]:
@@ -1462,14 +1526,17 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
     @app.post("/api/firstrun/pick", dependencies=dep)
     async def firstrun_pick(body: FirstRunPickBody) -> dict[str, Any]:
         """A chip was picked: the name is saved now; the web sends it as the person's
-        message next, and the model's reply is its first as itself."""
+        message next, and the model's reply is its first as itself. The chosen name goes on
+        the default bot too (``firstrun.rename_default_bot``)."""
         name = " ".join(body.name.split())[:MAX_NAME].strip()
         if not name:
             raise HTTPException(400, "name is required")
         try:
-            return svc.pick_first_name(name)
+            view = svc.pick_first_name(name)
         except LookupError as exc:
             raise HTTPException(409, str(exc)) from exc
+        firstrun.rename_default_bot(svc, name)
+        return view
 
     @app.post("/api/firstrun/dismiss", dependencies=dep)
     async def firstrun_dismiss() -> dict[str, Any]:

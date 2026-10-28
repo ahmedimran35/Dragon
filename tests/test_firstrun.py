@@ -137,6 +137,42 @@ def test_pick_and_dismiss():
     assert firstrun.running(asking) and not firstrun.running(firstrun.dismiss_chooser(asking))
 
 
+class FakeBotService:
+    """The write paths the naming ceremony uses: the profile and the default bot."""
+
+    def __init__(self) -> None:
+        self.profile: dict[str, str] = {}
+        self.bots: dict[str, dict[str, str]] = {"default": {"id": "default", "name": "Ember"}}
+        self.created: list[dict[str, str]] = []
+
+    def update_profile(self, data: dict[str, str]) -> None:
+        self.profile.update(data)
+
+    def update_bot(self, bot_id: str, data: dict[str, str]) -> dict[str, str]:
+        if bot_id not in self.bots:
+            raise KeyError(bot_id)
+        self.bots[bot_id].update(data)
+        return self.bots[bot_id]
+
+    def create_bot(self, data: dict[str, str]) -> dict[str, str]:
+        bot = {"id": f"b_{len(self.created):08x}", **data}
+        self.created.append(bot)
+        return bot
+
+
+def test_the_naming_ceremony_renames_the_default_bot():
+    svc = FakeBotService()
+    assert firstrun.rename_default_bot(svc, "  Wren  ") == "Wren"
+    assert svc.profile["name"] == "Wren"
+    assert svc.bots["default"]["name"] == "Wren"
+    assert firstrun.rename_default_bot(svc, "   ") == "" and svc.profile == {"name": "Wren"}
+    # when the default bot is somehow missing, the ceremony creates one for the name
+    bare = FakeBotService()
+    bare.bots.clear()
+    assert firstrun.rename_default_bot(bare, "Juno") == "Juno"
+    assert bare.created and bare.created[0]["name"] == "Juno"
+
+
 def test_pool_pick_is_stable_and_distinct():
     a = firstrun.built_in_suggestions("session-1", "en")
     assert a == firstrun.built_in_suggestions("session-1", "en") and len(a) == 2 and a[0] != a[1]
@@ -265,7 +301,9 @@ def test_the_first_conversation_over_the_api(server, settings: Settings):
     # a chip: the name is on the profile at once, the phase is `named`
     picked = client.post("/api/firstrun/pick", json={"name": " Wren "}).json()
     assert picked["phase"] == "named" and picked["chosen"] == "Wren"
-    assert service.profile.name == "Wren" and settings.agent.name == "Wren"
+    # the identity lives on the bot now (the default bot takes the chosen name)
+    assert service.profile.name == "Wren"
+    assert service.bot_of_thread("main")["name"] == "Wren"
     assert 'named you "Wren"' in main.build_system_prompt("Wren")
     assert client.post("/api/firstrun/pick", json={"name": "Pip"}).status_code == 409
     # the model's first reply as itself ends the ritual; the addendum is gone
@@ -293,6 +331,21 @@ def test_a_typed_name_and_a_bad_pick(server):
     state = client.get("/api/firstrun").json()
     assert state["phase"] == "done" and state["chosen"] == "Juno"
     assert service.profile.name == "Juno"
+    # the typed name lands on the default bot as well
+    assert service.bot_of_thread("main")["name"] == "Juno"
+
+
+def test_the_picked_name_goes_on_the_default_bot(server):
+    """The naming ceremony creates or renames the default bot through the bot path."""
+    client, service, llm = server
+    client.post("/api/firstrun/start", json={"lang": "en"})
+    llm.script.append(LLMResponse(content=ASK))
+    client.post("/api/threads/main/send", json={"text": "Lin"})
+    wait_idle(service)
+    picked = client.post("/api/firstrun/pick", json={"name": " Wren "}).json()
+    assert picked["chosen"] == "Wren"
+    bots = {b["id"]: b for b in service.list_bots()}
+    assert bots["default"]["name"] == "Wren"
 
 
 def test_dismiss_and_a_conversation_already_underway(server):

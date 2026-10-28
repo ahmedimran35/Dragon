@@ -30,6 +30,7 @@ MAX_FILE_BYTES = 64 * 1024 * 1024
 # the zip: every one of them appears when the feature that owns it has been used.
 FILES = (
     "profile.json",
+    "bots.json",
     "feed_posts.json",
     "tasks.json",
     "memory.db",
@@ -50,6 +51,7 @@ DIRS = ("threads", "sessions")
 README = """Your Dragon data, exported {when}
 
 profile.json        the agent's name and look
+bots.json           the bots: names, faces and personas
 feed_posts.json     the Feed as it was written
 tasks.json          the tasks the tab keeps: suggestions and what became of them
 memory.db           what the agent remembers

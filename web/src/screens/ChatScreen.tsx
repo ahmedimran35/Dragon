@@ -1,7 +1,9 @@
 import { ArrowUp, ChevronDown, FileText, Loader2, Menu, MessageSquarePlus, Moon, Plus, Square, Table2, Trash2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api, fileUrl } from "../api";
+import { botForThread, defaultBot } from "../bots";
 import { AvatarOptionsCard } from "../components/AvatarOptionsCard";
+import { BotPicker } from "../components/BotPicker";
 import { BrowserViewer } from "../components/BrowserViewer";
 import { MicButton, useDictation } from "../components/Dictation";
 import { ApprovalCard, ArtifactCard, BrowserCard, HandsCard, HoldCard, Notice, QuestionCard, ToolChip } from "../components/Cards";
@@ -30,7 +32,9 @@ export function ChatScreen() {
   const [activityOpen, setActivityOpen] = useState(false);
   // the browser card being watched (or driven) full-screen
   const [browserView, setBrowserView] = useState<string | null>(null);
-  const name = profile?.name ?? "Dragon";
+  // who this chat is with: the thread's own bot, falling back to the default bot
+  const bot = botForThread(state.bots, thread, profile);
+  const name = bot.name || "Dragon";
 
   const listRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -176,7 +180,7 @@ export function ChatScreen() {
       <div ref={headerRef} className="pointer-events-none absolute inset-x-0 top-0 z-10">
         <DragonHeader
           scrim
-          profile={profile}
+          profile={bot}
           status={status}
           name={name}
           statusLine={statusLine}
@@ -886,16 +890,19 @@ export function ThreadList({
   /** the main chat on its own, then the side chats under their own heading with a + (the chats column on a wide screen) */
   grouped?: boolean;
 }) {
-  const { toast, dispatch } = useStore();
+  const { state, toast, dispatch } = useStore();
   const t = useT();
   const [title, setTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  // which bot the new chat is with: the chosen one, else the default bot
+  const [pickedBot, setPickedBot] = useState("");
+  const botId = pickedBot || defaultBot(state.bots, state.profile).id;
   const newInput = useRef<HTMLInputElement>(null);
 
   const create = async () => {
     setCreating(true);
     try {
-      const created = await api.createThread(title.trim() || t("Side chat"));
+      const created = await api.createThread(title.trim() || t("Side chat"), botId);
       dispatch({ type: "ws", msg: { kind: "thread", thread: created } });
       setTitle("");
       onPick(created.id);
@@ -979,6 +986,7 @@ export function ThreadList({
       ) : (
         <ul className={listCls}>{threads.map(row)}</ul>
       )}
+      <BotPicker bots={state.bots} value={botId} onChange={setPickedBot} />
       <div className={cx("flex gap-2", compact ? "mt-3" : "mt-4")}>
         <input
           ref={newInput}

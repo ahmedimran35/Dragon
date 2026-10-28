@@ -1438,6 +1438,26 @@ const zhCN: Record<string, string> = {
     "只有这个提供商的请求会经过它。",
   "Pick a provider and paste a key of your own; it is stored encrypted in the vault on the server and never shown to the model. Or point Dragon at a local endpoint that needs no key.":
     "选一个提供商，粘贴你自己的密钥；它会加密保存在服务器的保险库里，永远不会展示给模型。也可以让 Dragon 连接一个不需要密钥的本地接口。",
+
+  // ── Bots: the personas the person chats with ────────────────────────────────────
+  Bots: "机器人",
+  Manage: "管理",
+  "New bot": "新建机器人",
+  "Every bot is its own persona, with its own face, voice and job.": "每个机器人都有自己的人格：自己的形象、说话方式和职责。",
+  Instructions: "指令",
+  "What this bot is for, and how it should do it.": "这个机器人负责什么，以及该怎么做。",
+  "Delete bot": "删除机器人",
+  "Delete this bot?": "删除这个机器人？",
+  Deleted: "已删除",
+  "Bot for the new chat": "新对话使用的机器人",
+  "Its own face, voice and job.": "自己的形象、说话方式和职责。",
+  "Only {name} so far.": "目前只有 {name}。",
+  "Add another when a job needs its own face and voice.": "当某件事需要自己的形象和说话方式时，再加一个。",
+  "Select a bot to see its face, voice and instructions.": "选一个机器人，查看它的形象、说话方式和指令。",
+  "Who it is": "它是谁",
+  Face: "形象",
+  Voice: "说话方式",
+  "The face it wears in the roster and the chats.": "它在名单和对话里用的形象。",
 };
 
 export default zhCN;

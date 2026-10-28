@@ -46,6 +46,7 @@ decides the default answer).
 | Path | What lives there |
 |---|---|
 | `dragon/agent/` | the loop: prompt assembly, tool execution, holds (approvals) |
+| `dragon/bots/` | the bots: names, faces, personas, and which one a chat speaks as |
 | `dragon/llm/` | model clients (Chat Completions, Responses, catalogue ids), sessions, the provider catalogue `providers.json` |
 | `dragon/sentinel/` | policy (risk levels, rules), the gate, standing grants, the audit log |
 | `dragon/tools/` | every tool the agent can call — `base.py` defines what a tool is |
@@ -73,6 +74,7 @@ All of it is under `<data_dir>`:
 ```
 ~/.dragon/
   app-settings.json    what the web app configured (connections, custom endpoints)
+  bots.json            the bots: names, faces and personas
   audit.jsonl          the Sentinel's log
   server_token         the access token (generated on first run)
   vault/ vault.key     encrypted secrets and their key

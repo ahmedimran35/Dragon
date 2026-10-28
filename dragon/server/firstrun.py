@@ -238,6 +238,27 @@ def dismiss_chooser(state: FirstRunState) -> FirstRunState:
     return replace(state, phase="done", finished_at=time.time())
 
 
+# ---- the name lands -----------------------------------------------------------------------
+
+
+def rename_default_bot(svc: Any, name: str) -> str:
+    """The naming ceremony's write path: the chosen name is saved where the rest of the app
+    reads it — the profile through ``DragonService.update_profile``, and the ``"default"``
+    bot through the same bot path the rest of the app uses (``DragonService.update_bot``);
+    when that bot somehow does not exist yet, it is created. Returns the name as saved, or
+    "" when there was nothing to save."""
+    name = " ".join((name or "").split())[:MAX_NAME].strip()
+    if not name:
+        return ""
+    svc.update_profile({"name": name})
+    try:
+        svc.update_bot("default", {"name": name})
+    except KeyError:
+        # no default bot yet: the ceremony's own is created for the name
+        svc.create_bot({"name": name})
+    return name
+
+
 def bound_to(state: FirstRunState, session_id: str | None) -> bool:
     """The first conversation is bound to this thread (started there, or still there)."""
     return session_id is not None and state.session_id == session_id and state.phase != "none"
@@ -426,6 +447,7 @@ __all__ = [
     "is_zh",
     "pick_name",
     "prompt_addendum",
+    "rename_default_bot",
     "running",
     "start_conversation",
 ]

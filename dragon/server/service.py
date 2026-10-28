@@ -28,6 +28,7 @@ from dragon.agent import DragonAgent, Incoming
 from dragon.app import DragonApp
 from dragon.avatar import AvatarStudio
 from dragon.background import spawn
+from dragon.bots import DEFAULT_BOT_ID, BotStore
 from dragon.coding.service import CodingService
 from dragon.config import Settings
 from dragon.goals import Goal
@@ -130,17 +131,22 @@ PROACTIVITY = ("off", "low", "default", "high")
 # identity limits and vocabularies (the app's forms and the identity tool share them)
 NAME_MAX = 20
 TAGLINE_MAX = 60
-TONES: dict[str, str] = {
-    "formal": "Tone: formal. Polite and precise, no slang, no exclamation marks.",
-    "casual": "Tone: casual. Relaxed and friendly, the way a capable friend talks.",
-    "playful": "Tone: playful. Light and a little witty, never at the expense of being clear.",
-    "concise": "Tone: concise. Say what matters, then stop; no preamble, no recap.",
-}
-COMMUNICATION: dict[str, str] = {
-    "short": "Length: keep replies short, a few sentences, one or two paragraphs at most, unless asked for more.",
-    "detailed": "Length: be thorough; give the reasoning, the alternatives and what you ruled out.",
-    "bullets": "Shape: prefer bullet points and short headings over running prose; one idea per line.",
-}
+# how a bot talks and how long it talks: the vocabularies live beside the prompt
+# paragraphs they become (dragon/prompts.py); a bot's tone is a key of TONES or ""
+TONES: dict[str, str] = prompts.TONES
+COMMUNICATION: dict[str, str] = prompts.COMMUNICATION
+# the identity fields a bot owns; the profile keeps mirroring them on the default bot
+# (profile.json is what older surfaces read) and nothing else
+BOT_PROFILE_FIELDS = (
+    "name",
+    "avatar",
+    "emoji",
+    "color",
+    "tagline",
+    "tone",
+    "communication",
+    "style",
+)
 # how the configured interval stretches or shrinks per level
 _INTERVAL_FACTOR = {"low": 2.0, "default": 1.0, "high": 0.5}
 _QUIET_HOURS_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)-([01]?\d|2[0-3]):([0-5]\d)$")
@@ -275,6 +281,8 @@ class Thread:
     updated_at: str
     timeline: Timeline
     agent: DragonAgent
+    # the bot this chat speaks as (dragon/bots); the default bot unless it names another
+    bot_id: str = DEFAULT_BOT_ID
     inbox: asyncio.Queue[str | Incoming] = field(default_factory=asyncio.Queue)
     worker: asyncio.Task[None] | None = None
     stopping: bool = False
@@ -288,6 +296,7 @@ class Thread:
             "title": self.title,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "bot_id": self.bot_id,
             "busy": self.busy,
             "queued": self.inbox.qsize(),
             "events": len(self.timeline.events),
@@ -317,6 +326,9 @@ class DragonService:
         self.threads: dict[str, Thread] = {}
         self._base_instructions = settings.agent.instructions
         self.profile = self._load_profile()
+        # the personas chats speak as (bots.json). A first load seeds the default bot from
+        # the profile's identity fields, so an existing install keeps its name and voice.
+        self.bots = BotStore(self.data_dir / "bots.json", seed=self._bot_seed())
         self._apply_profile()
         self.ui = WebUI(
             self.bus,
@@ -492,30 +504,26 @@ class DragonService:
                 pass
         return Profile(name=self.settings.agent.name)
 
+    def _bot_seed(self) -> dict[str, Any]:
+        """The default bot's identity on a first load: the persona profile.json holds (it
+        predates bots). user_name, proactivity and quiet_hours stay user settings and are
+        not bot fields."""
+        return {k: getattr(self.profile, k) for k in BOT_PROFILE_FIELDS}
+
     def _save_profile(self) -> None:
         (self.data_dir / "profile.json").write_text(
             json.dumps(self.profile.to_dict(), ensure_ascii=False, indent=1), "utf-8"
         )
 
     def _apply_profile(self) -> None:
+        """The user-level profile in the shared instructions: what to call the person.
+        The agent's identity (name, look, tone, style) is not applied here any more — it
+        lives on the thread's bot (dragon/bots) and reaches the prompt from there."""
         a = self.settings.agent
-        a.name = self.profile.name
         extra = ""
         if self.profile.user_name:
             extra += (
                 f"\nThe user's name is {self.profile.user_name}; address them by it when natural."
-            )
-        if self.profile.tagline.strip():
-            extra += f"\nYour tagline, the line under your name in the app: {self.profile.tagline.strip()!r}"
-        # each choice is its own paragraph, so a change to one leaves the others alone
-        if self.profile.tone in TONES:
-            extra += "\n\n" + TONES[self.profile.tone]
-        if self.profile.communication in COMMUNICATION:
-            extra += "\n\n" + COMMUNICATION[self.profile.communication]
-        if self.profile.style.strip():
-            extra += (
-                "\n\nYour personality / style, in the user's own words: "
-                + self.profile.style.strip()
             )
         a.instructions = (self._base_instructions.rstrip() + extra).strip()
 
@@ -545,8 +553,85 @@ class DragonService:
             self.schedule_next_pass()
         self._save_profile()
         self._apply_profile()
+        # identity fields move with the profile: the default bot carries them now
+        identity = {k: getattr(self.profile, k) for k in BOT_PROFILE_FIELDS if k in data}
+        if identity:
+            self.bots.update(self.default_bot_id, identity)
+            self._refresh_bot(self.default_bot_id)
+            self.bus.publish({"kind": "bots", "bots": self.list_bots()})
         self.bus.publish({"kind": "profile", "profile": self.profile.to_dict()})
         return self.profile
+
+    # ------------------------------------------------------------------ bots
+    @property
+    def default_bot_id(self) -> str:
+        """The bot every thread speaks as unless it names another one."""
+        return DEFAULT_BOT_ID
+
+    def list_bots(self) -> list[dict[str, Any]]:
+        """Every bot as its JSON object, the default bot first."""
+        return self.bots.list()
+
+    def create_bot(self, data: dict[str, Any]) -> dict[str, Any]:
+        """A new bot (``name`` required; ``tone`` a key of :data:`TONES`); the id is
+        minted here. Raises :class:`ValueError` for a value that cannot be kept."""
+        bot = self.bots.create(data)
+        self.bus.publish({"kind": "bots", "bots": self.list_bots()})
+        return bot
+
+    def update_bot(self, bot_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Change one bot (:class:`KeyError` for an unknown id). The threads speaking as
+        it pick the new persona up at once; the default bot mirrors its identity into
+        profile.json, which older surfaces read."""
+        bot = self.bots.update(bot_id, data)
+        if bot_id == self.default_bot_id:
+            self._mirror_profile(bot)
+        self._refresh_bot(bot_id)
+        self.bus.publish({"kind": "bots", "bots": self.list_bots()})
+        return bot
+
+    def delete_bot(self, bot_id: str) -> None:
+        """Remove a bot (:class:`ValueError` when refused: the default bot and the last
+        bot always stay). Its threads fall back to the default bot."""
+        self.bots.delete(bot_id)
+        fallback = self.bots.get(self.default_bot_id) or {}
+        for t in self.threads.values():
+            if t.bot_id == bot_id:
+                t.bot_id = self.default_bot_id
+                t.agent.bot = dict(fallback)
+        self._save_index()
+        self.bus.publish({"kind": "bots", "bots": self.list_bots()})
+
+    def bot_of_thread(self, thread_id: str) -> dict[str, Any]:
+        """The bot a thread speaks as — its own, or the default bot when the thread (or
+        its stored bot id) is unknown."""
+        thread = self.threads.get(thread_id)
+        bot = self.bots.get(thread.bot_id) if thread is not None else None
+        return bot or self.bots.get(self.default_bot_id) or {}
+
+    def _refresh_bot(self, bot_id: str) -> None:
+        """A bot changed: the threads speaking as it see the new persona immediately."""
+        bot = self.bots.get(bot_id)
+        if bot is None:
+            return
+        for t in self.threads.values():
+            if t.bot_id == bot_id:
+                t.agent.bot = dict(bot)
+
+    def _mirror_profile(self, bot: dict[str, Any]) -> None:
+        """The default bot's identity into profile.json, so the name and look older
+        surfaces read (the CLI banner, the data export) stay true."""
+        current = self.profile.to_dict()
+        changed = False
+        for key in BOT_PROFILE_FIELDS:
+            if current.get(key) != bot.get(key):
+                setattr(self.profile, key, bot.get(key))
+                changed = True
+        if not changed:
+            return
+        self._save_profile()
+        self._apply_profile()
+        self.bus.publish({"kind": "profile", "profile": self.profile.to_dict()})
 
     # ------------------------------------------------------------------ first conversation (C4)
     def firstrun_lang(self, lang: str = "") -> str:
@@ -674,7 +759,13 @@ class DragonService:
                 # an id the app would refuse now: drop the line rather than refuse to start
                 logger.warning("threads index: ignoring the entry with the id {!r}", tid)
                 continue
-            self._make_thread(tid, m.get("title", tid), m.get("created_at"), m.get("updated_at"))
+            self._make_thread(
+                tid,
+                m.get("title", tid),
+                m.get("created_at"),
+                m.get("updated_at"),
+                bot_id=str(m.get("bot_id") or ""),
+            )
         self._save_index()
 
     def _save_index(self) -> None:
@@ -685,6 +776,7 @@ class DragonService:
                 "title": t.title,
                 "created_at": t.created_at,
                 "updated_at": t.updated_at,
+                "bot_id": t.bot_id,
             }
             metas.append(m)
         (self.threads_dir / "index.json").write_text(
@@ -707,7 +799,14 @@ class DragonService:
         title: str,
         created_at: str | None = None,
         updated_at: str | None = None,
+        bot_id: str = "",
     ) -> Thread:
+        # a stored id that names a bot that is gone falls back to the default bot
+        bot_id = (bot_id or "").strip() or DEFAULT_BOT_ID
+        bot = self.bots.get(bot_id)
+        if bot is None:
+            bot_id = DEFAULT_BOT_ID
+            bot = self.bots.get(DEFAULT_BOT_ID) or {}
         timeline = Timeline(thread_id, self._thread_file(thread_id, ".json"))
         # Cards that were waiting for an answer when the server stopped can't be answered
         # any more: the agent run behind them is gone.
@@ -746,6 +845,7 @@ class DragonService:
             skills=self.app.skills,
             session_file=session_file,
             conversation_id=thread_id,
+            bot=bot,
         )
         if session_file.exists():
             try:
@@ -759,6 +859,7 @@ class DragonService:
             updated_at=updated_at or created_at or now_iso(),
             timeline=timeline,
             agent=agent,
+            bot_id=bot_id,
         )
         self.threads[thread_id] = thread
         return thread
@@ -770,9 +871,14 @@ class DragonService:
             self._save_index()
         return thread.timeline
 
-    def create_thread(self, title: str = "") -> Thread:
+    def create_thread(self, title: str = "", bot_id: str = "") -> Thread:
+        """A side chat, speaking as ``bot_id``'s bot (the default bot when empty).
+        :class:`KeyError` when the bot does not exist."""
+        bot_id = (bot_id or "").strip() or DEFAULT_BOT_ID
+        if self.bots.get(bot_id) is None:
+            raise KeyError(bot_id)
         tid = "t_" + uuid.uuid4().hex[:8]
-        thread = self._make_thread(tid, title.strip() or "Side chat")
+        thread = self._make_thread(tid, title.strip() or "Side chat", bot_id=bot_id)
         self._save_index()
         self.bus.publish({"kind": "thread", "thread": thread.meta()})
         return thread
@@ -1107,7 +1213,7 @@ class DragonService:
         if not purpose:
             self._firstrun_turn_ended(thread.id, final)
         self._task_run_finished(thread.id)
-        self._maybe_reflect()
+        self._maybe_reflect(self.bot_of_thread(thread.id))
 
     # ------------------------------------------------------------------ approvals
     def decide(
@@ -2281,17 +2387,21 @@ class DragonService:
                 )
         return "\n".join(lines[-60:])
 
-    async def reflect_now(self) -> list[MemoryItem]:
+    async def reflect_now(self, bot: dict[str, Any] | None = None) -> list[MemoryItem]:
         """One reflection pass: what happened lately becomes at most a few durable
         lessons, kept in memory beside everything else it knows, under the words they
-        should surface for."""
+        should surface for. ``bot`` is the bot that ran (its name frames the pass and its
+        id owns what is kept); the default bot when there is none."""
         if self.app.memory is None or not self.settings.agent.reflect:
             return []
+        bot = bot or self.bots.get(self.default_bot_id) or {}
+        name = " ".join(str(bot.get("name") or "").split()) or self.profile.name
+        owner = str(bot.get("id") or "").strip() or self.default_bot_id
         trajectory = self._trajectory(self.app.memory.get_meta("reflected_at"))
         if "- asked:" not in trajectory:
             return []  # nothing the user asked for: nothing to learn from
         prompt = REFLECT_PROMPT.format(
-            name=self.profile.name,
+            name=name,
             n=LESSONS_PER_PASS,
             language="the same language as the trajectory above"
             if self.settings.agent.language in ("", "auto")
@@ -2307,7 +2417,9 @@ class DragonService:
             line = lesson_line(lesson)
             if any(similarity(line, m.content) >= 0.6 for m in known):
                 continue  # the same lesson, kept already
-            written.append(self.app.memory.add(line, category="lesson", source="reflection"))
+            written.append(
+                self.app.memory.add(line, category="lesson", source="reflection", owner=owner)
+            )
         self.app.memory.set_meta("reflected_at", now_iso())
         if written:
             self.bus.publish({"kind": "memory"})
@@ -2338,10 +2450,11 @@ class DragonService:
         )
         self.threads[MAIN_THREAD].updated_at = now_iso()
 
-    def _maybe_reflect(self) -> None:
+    def _maybe_reflect(self, bot: dict[str, Any] | None = None) -> None:
         """Ask the reflector after a run, at most one pass in a while. It is quiet work:
         it never gets in the way of the run that just ended, and a mock model (a test's
-        scripted turns) is never asked to do it."""
+        scripted turns) is never asked to do it. ``bot`` is the bot that ran; its name
+        and id frame the pass and own what it keeps."""
         if (
             not self.settings.agent.reflect
             or self.app.memory is None
@@ -2358,7 +2471,7 @@ class DragonService:
 
         async def pass_() -> None:
             try:
-                await self.reflect_now()
+                await self.reflect_now(bot)
             except Exception as exc:  # noqa: BLE001 - reflection must never bother anyone
                 logger.warning("reflection failed: {}", exc)
             finally:
@@ -2825,6 +2938,8 @@ class DragonService:
             "profile": self.profile.to_dict(),
             "status": self.ui.overall_status(),
             "threads": [t.meta() for t in self.visible_threads()],
+            # the personas the chats speak as (bot JSON objects, default bot first)
+            "bots": self.list_bots(),
             "pending_approvals": [
                 ev
                 for t in self.visible_threads()

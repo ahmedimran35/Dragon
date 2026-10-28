@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Profile, Status } from "../types";
+import type { Bot, Profile, Status } from "../types";
 import { cx } from "../util";
 import { Avatar } from "./Avatar";
 
@@ -26,7 +26,8 @@ export function DragonHeader({
   className,
   scrim = false,
 }: {
-  profile: Profile | null;
+  /** the face on the disc: the bot this chat is with, or the runtime's profile */
+  profile: Profile | Bot | null;
   status?: Status;
   name: string;
   statusLine?: string | null;

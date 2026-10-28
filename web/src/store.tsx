@@ -17,6 +17,7 @@ import { readStorage, writeStorage } from "./util";
 import type {
   ApprovalEvent,
   AttachmentInfo,
+  Bot,
   CodingEvent,
   CodingRun,
   FirstRunView,
@@ -35,7 +36,7 @@ import type {
 } from "./types";
 
 /** Tab bar: chat · feed · tasks · goals · library. Memory, connections and settings live behind the avatar. */
-export type Tab = "chat" | "feed" | "tasks" | "goals" | "library" | "memory" | "connections" | "channels" | "skills" | "you" | "coding" | "avatar";
+export type Tab = "chat" | "feed" | "tasks" | "goals" | "library" | "memory" | "connections" | "channels" | "skills" | "you" | "coding" | "avatar" | "bots";
 /**
  * The page this app is framed in (the showcase's frame), when it can be named: the
  * ancestor's origin where the browser exposes it, else the referrer's. A message to the parent
@@ -60,7 +61,7 @@ function tellParent(message: { type: string; [k: string]: unknown }): void {
   if (origin) window.parent.postMessage(message, origin);
 }
 
-const TAB_NAMES: Tab[] = ["chat", "feed", "tasks", "goals", "library", "memory", "connections", "channels", "skills", "you", "coding", "avatar"];
+const TAB_NAMES: Tab[] = ["chat", "feed", "tasks", "goals", "library", "memory", "connections", "channels", "skills", "you", "coding", "avatar", "bots"];
 
 /** A coding run being followed live: the run itself and the steps that arrived so far. */
 export interface CodingLive {
@@ -92,6 +93,8 @@ export interface AppState {
   profile: Profile | null;
   status: Status;
   threads: ThreadMeta[];
+  /** The bots: one row each in the roster, one per persona. */
+  bots: Bot[];
   activeThread: string;
   events: Record<string, TimelineEvent[]>;
   hasMore: Record<string, boolean>;
@@ -169,6 +172,7 @@ type Action =
   | { type: "eventsFailed"; thread: string }
   | { type: "activeThread"; thread: string }
   | { type: "goals"; goals: Goal[] }
+  | { type: "bots"; bots: Bot[] }
   | { type: "settings"; settings: SettingsView }
   | { type: "tab"; tab: Tab }
   | { type: "drawer"; open: boolean }
@@ -210,6 +214,7 @@ const initial: AppState = {
   profile: null,
   status: { state: "idle", detail: "", thread: "main" },
   threads: [],
+  bots: [],
   activeThread: "main",
   events: {},
   hasMore: {},
@@ -311,6 +316,7 @@ function reducer(state: AppState, action: Action): AppState {
         status: s.status,
         streams: {},
         threads: s.threads,
+        bots: s.bots ?? [],
         goals: s.goals,
         settings: s.settings,
         pendingApprovals: s.pending_approvals,
@@ -350,6 +356,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, activeThread: action.thread, tab: "chat" };
     case "goals":
       return { ...state, goals: action.goals };
+    case "bots":
+      return { ...state, bots: action.bots };
     case "settings":
       return { ...state, settings: action.settings, profile: action.settings.profile };
     case "tab":

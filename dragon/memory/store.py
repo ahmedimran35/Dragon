@@ -47,6 +47,9 @@ class MemoryItem:
     created_at: str
     source: str
     updated_at: str = ""
+    # whose memory this is: a bot id, or "shared" for what every bot sees. Rows from
+    # before bots existed were written for whoever ran, so they are "shared".
+    owner: str = "shared"
 
     def render(self) -> str:
         return f"[{self.id}] ({self.category}) {self.content}"
@@ -98,6 +101,20 @@ def content_hash(text: str) -> str:
     return hashlib.sha1(text.strip().encode("utf-8")).hexdigest()[:16]
 
 
+def _owner_clause(owner: str | None) -> tuple[str, tuple[str, ...]]:
+    """SQL filtering rows to one owner plus the shared ones; ``None`` sees everything."""
+    if owner is None:
+        return "", ()
+    return " WHERE owner = ? OR owner = 'shared'", (str(owner),)
+
+
+def _visible(items: list[MemoryItem], owner: str | None) -> list[MemoryItem]:
+    if owner is None:
+        return items
+    owner = str(owner)
+    return [m for m in items if m.owner in (owner, "shared")]
+
+
 class MemoryStore:
     def __init__(self, path: Path | str):
         self.path = str(path)
@@ -120,6 +137,11 @@ class MemoryStore:
         if "updated_at" not in columns:
             self._conn.execute(
                 "ALTER TABLE memories ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''"
+            )
+        if "owner" not in columns:
+            # rows written before bots existed were for whoever ran: "shared"
+            self._conn.execute(
+                "ALTER TABLE memories ADD COLUMN owner TEXT NOT NULL DEFAULT 'shared'"
             )
         self._conn.execute(
             """
@@ -155,12 +177,21 @@ class MemoryStore:
         self._conn.close()
 
     # ------------------------------------------------------------------ CRUD
-    def add(self, content: str, category: str = "general", source: str = "agent") -> MemoryItem:
+    def add(
+        self,
+        content: str,
+        category: str = "general",
+        source: str = "agent",
+        owner: str = "shared",
+    ) -> MemoryItem:
         content = content.strip()
         if not content:
             raise ValueError("memory content is empty")
-        # De-duplicate exact matches.
-        row = self._conn.execute("SELECT * FROM memories WHERE content = ?", (content,)).fetchone()
+        owner = str(owner or "shared")
+        # De-duplicate exact matches within the same owner.
+        row = self._conn.execute(
+            "SELECT * FROM memories WHERE content = ? AND owner = ?", (content, owner)
+        ).fetchone()
         if row:
             return self._row(row)
         item = MemoryItem(
@@ -169,6 +200,7 @@ class MemoryStore:
             category=category or "general",
             created_at=_now(),
             source=source,
+            owner=owner,
         )
         self._insert(item)
         self._conn.commit()
@@ -198,16 +230,18 @@ class MemoryStore:
         row = self._conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         return self._row(row) if row else None
 
-    def all(self, limit: int = 1000) -> list[MemoryItem]:
+    def all(self, limit: int = 1000, owner: str | None = None) -> list[MemoryItem]:
+        where, params = _owner_clause(owner)
         rows = self._conn.execute(
-            "SELECT * FROM memories ORDER BY created_at DESC LIMIT ?", (limit,)
+            f"SELECT * FROM memories{where} ORDER BY created_at DESC LIMIT ?", (*params, limit)
         ).fetchall()
         return [self._row(r) for r in rows]
 
-    def _recent(self, limit: int = 1000) -> list[MemoryItem]:
+    def _recent(self, limit: int = 1000, owner: str | None = None) -> list[MemoryItem]:
+        where, params = _owner_clause(owner)
         rows = self._conn.execute(
-            "SELECT * FROM memories ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC, rowid DESC LIMIT ?",
-            (limit,),
+            f"SELECT * FROM memories{where} ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC, rowid DESC LIMIT ?",
+            (*params, limit),
         ).fetchall()
         return [self._row(r) for r in rows]
 
@@ -263,16 +297,16 @@ class MemoryStore:
         return int(self._conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0])
 
     # ------------------------------------------------------------------ retrieval
-    def search(self, query: str, limit: int = 10) -> list[MemoryItem]:
+    def search(self, query: str, limit: int = 10, owner: str | None = None) -> list[MemoryItem]:
         """Memories that share words with ``query``, rarest shared words counting most.
 
         A word that is in half the memories ("likes", "the", "我") says little about
         which one is meant; a word in one memory says everything. Scores are the sum of
         ``log(N / df)`` over the shared tokens, plus a bonus when the whole query appears
-        verbatim.
+        verbatim. ``owner`` narrows the field to one bot's memories plus the shared ones.
         """
         q_tokens = tokenize(query)
-        items = self.all()
+        items = self.all(owner=owner)
         if not q_tokens:
             return items[:limit]
         tokens = {item.id: tokenize(item.content) for item in items}
@@ -293,12 +327,12 @@ class MemoryStore:
         scored.sort(key=lambda p: (-p[0], p[1].created_at))
         return [item for _, item in scored[:limit]]
 
-    def relevant(self, context: str, limit: int = 20) -> list[MemoryItem]:
+    def relevant(self, context: str, limit: int = 20, owner: str | None = None) -> list[MemoryItem]:
         """Memories to inject into the system prompt: matches first, then most recent."""
-        items = self._recent()
+        items = self._recent(owner=owner)
         if len(items) <= limit:
             return items
-        return self._fill(self.search(context, limit=limit), items, limit)
+        return self._fill(self.search(context, limit=limit, owner=owner), items, limit)
 
     @staticmethod
     def _fill(matched: list[MemoryItem], items: list[MemoryItem], limit: int) -> list[MemoryItem]:
@@ -313,26 +347,31 @@ class MemoryStore:
             matched = [*matched[: limit - 1], items[0]]
         return matched
 
-    async def search_async(self, query: str, limit: int = 10) -> list[MemoryItem]:
+    async def search_async(
+        self, query: str, limit: int = 10, owner: str | None = None
+    ) -> list[MemoryItem]:
         """``search`` with the meaning-based ranking fused in when an index is set up."""
         if self.index is not None:
-            return await self.index.search(query, limit=limit)
-        return self.search(query, limit=limit)
+            return _visible(await self.index.search(query, limit=limit), owner)
+        return self.search(query, limit=limit, owner=owner)
 
-    async def relevant_async(self, context: str, limit: int = 20) -> list[MemoryItem]:
+    async def relevant_async(
+        self, context: str, limit: int = 20, owner: str | None = None
+    ) -> list[MemoryItem]:
         """``relevant`` with the meaning-based ranking fused in when an index is set up."""
-        items = self._recent()
+        items = self._recent(owner=owner)
         if len(items) <= limit:
             return items
         if self.index is not None:
-            return self._fill(await self.index.search(context, limit=limit), items, limit)
-        return self._fill(self.search(context, limit=limit), items, limit)
+            matched = _visible(await self.index.search(context, limit=limit), owner)
+            return self._fill(matched, items, limit)
+        return self._fill(self.search(context, limit=limit, owner=owner), items, limit)
 
     def similar(
-        self, content: str, threshold: float = 0.5, limit: int = 3
+        self, content: str, threshold: float = 0.5, limit: int = 3, owner: str | None = None
     ) -> list[tuple[float, MemoryItem]]:
         """Memories that say roughly the same thing as ``content``, most alike first."""
-        pairs = [(similarity(content, item.content), item) for item in self.all()]
+        pairs = [(similarity(content, item.content), item) for item in self.all(owner=owner)]
         pairs = [(s, item) for s, item in pairs if s >= threshold]
         pairs.sort(key=lambda p: -p[0])
         return pairs[:limit]
@@ -345,15 +384,19 @@ class MemoryStore:
         category: str = "",
         action: str = "merge",
         reason: str = "",
+        owner: str | None = None,
     ) -> MemoryChange | None:
         """Put one memory in the place of ``ids`` and log the change.
 
         The new memory is added by the user if any of the old ones was; its age is the
-        oldest of them, so a merged fact does not look freshly learned.
+        oldest of them, so a merged fact does not look freshly learned. It keeps the
+        owner of the lines it replaces when they agree, and becomes shared when they do
+        not — a rewrite must not make anyone lose a fact. ``owner`` overrides that.
         """
         before = [m for m in (self.get(i) for i in ids) if m is not None]
         if not before or not content.strip():
             return None
+        owners = {m.owner for m in before}
         after = MemoryItem(
             id="m_" + uuid.uuid4().hex[:8],
             content=content.strip(),
@@ -361,6 +404,7 @@ class MemoryStore:
             created_at=min(m.created_at for m in before),
             source="user" if any(m.source == "user" for m in before) else "agent",
             updated_at=_now(),
+            owner=str(owner) if owner else (next(iter(owners)) if len(owners) == 1 else "shared"),
         )
         for m in before:
             self._conn.execute("DELETE FROM memories WHERE id = ?", (m.id,))
@@ -455,8 +499,16 @@ class MemoryStore:
     # ------------------------------------------------------------------ helpers
     def _insert(self, item: MemoryItem) -> None:
         self._conn.execute(
-            "INSERT INTO memories (id, content, category, created_at, source, updated_at) VALUES (?,?,?,?,?,?)",
-            (item.id, item.content, item.category, item.created_at, item.source, item.updated_at),
+            "INSERT INTO memories (id, content, category, created_at, source, updated_at, owner) VALUES (?,?,?,?,?,?,?)",
+            (
+                item.id,
+                item.content,
+                item.category,
+                item.created_at,
+                item.source,
+                item.updated_at,
+                item.owner or "shared",
+            ),
         )
 
     def _log(
@@ -492,6 +544,7 @@ class MemoryStore:
             created_at=row["created_at"],
             source=row["source"],
             updated_at=row["updated_at"] or "",
+            owner=row["owner"] or "shared",
         )
 
     @staticmethod

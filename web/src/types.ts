@@ -227,6 +227,35 @@ export interface ThreadMeta {
   busy: boolean;
   queued: number;
   events: number;
+  /** Which bot this chat is with. Older chats name none and are the default bot's. */
+  bot_id: string;
+}
+
+/**
+ * A bot: one persona the person can chat with — its own face, voice and instructions.
+ * The bot every chat falls back to has the id exactly "default".
+ */
+export interface Bot {
+  id: string;
+  name: string;
+  /** "dragon" (the built-in face), the id of a face drawn in the avatar studio, or "" for the emoji. */
+  avatar: string;
+  emoji: string;
+  color: string;
+  /** one line under the name */
+  tagline: string;
+  /** how it talks: "" | formal | casual | playful | concise (the tone picker's keys) */
+  tone: string;
+  /** how much and in what shape: "" | short | detailed | bullets */
+  communication: string;
+  /** free text about its personality, in the user's words */
+  style: string;
+  /** what this bot is for and how it should do it, in the user's words */
+  instructions: string;
+  /** "" = the runtime's default model (kept, not used yet) */
+  model: string;
+  /** unix seconds */
+  created_at: number;
 }
 
 export type Capability = "chat" | "vision" | "image" | "video";
@@ -414,6 +443,7 @@ export interface Status {
 }
 
 export interface Profile {
+  /** The runtime's own profile: the name and face this console greets you with. The chat personas live in `Bot`. */
   name: string;
   /** "dragon", the id of a face drawn in the avatar studio (see avatars.ts), or "" for the emoji on a colour. */
   avatar: string;
@@ -957,6 +987,8 @@ export interface StateSnapshot {
   profile: Profile;
   status: Status;
   threads: ThreadMeta[];
+  /** The bots: one per persona, the one with id "default" first among equals. */
+  bots: Bot[];
   pending_approvals: ApprovalEvent[];
   goals: Goal[];
   settings: SettingsView;

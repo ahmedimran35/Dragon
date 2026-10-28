@@ -1,4 +1,8 @@
-"""Append-only JSONL audit trail of everything the agent did (and was refused)."""
+"""Append-only JSONL audit trail of everything the agent did (and was refused).
+
+Every entry carries a ``bot`` field: the id of the bot whose run wrote it, "" when nothing
+is known about one. Lines written before that field existed still parse; ``tail`` fills the
+field in for them."""
 
 from __future__ import annotations
 
@@ -20,6 +24,21 @@ def _truncate(value: Any, limit: int = 500) -> Any:
     if isinstance(value, list):
         return [_truncate(v, limit) for v in value[:50]]
     return value
+
+
+def _run_bot_id() -> str:
+    """The id of the bot whose agent run is writing this entry: the Sentinel's task context
+    when it names one, else the running turn's bot (:mod:`dragon.bots`); "" outside any run.
+    Imported here only at call time: the gate imports this module."""
+    from dragon.bots import running_bot, running_bot_id
+    from dragon.sentinel.gate import current_task
+
+    task = current_task()
+    if task is not None and task.bot_id:
+        return task.bot_id
+    if running_bot() is not None:
+        return running_bot_id()
+    return ""
 
 
 def channel_of(tool: str) -> str:
@@ -52,6 +71,10 @@ class AuditLog:
         entry: dict[str, Any] = {
             "ts": datetime.now(UTC).isoformat(timespec="milliseconds"),
             "event": event,
+            # which bot did this: the id of the bot whose run wrote the entry, "" when
+            # nothing is known about one. Every entry carries the field, so a reader meets
+            # the same shape on every line (older lines may lack it; `tail` fills it in).
+            "bot": str(fields.pop("bot", "") or _run_bot_id()),
         }
         if self.session_id:
             entry["session"] = self.session_id
@@ -74,9 +97,13 @@ class AuditLog:
             if not line:
                 continue
             try:
-                out.append(json.loads(line))
+                entry = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if isinstance(entry, dict):
+                # a line from before the bot field existed reads as "no bot known"
+                entry.setdefault("bot", "")
+            out.append(entry)
         return out
 
 

@@ -1,9 +1,15 @@
-"""Memory tools: remember / recall / forget."""
+"""Memory tools: remember / recall / forget.
+
+What a bot remembers is its own: a memory is tagged with the running bot's id
+(:func:`dragon.bots.running_bot_id`) and recall answers with that bot's memories plus
+the shared ones. What the user asks to forget goes, whoever wrote it.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
+from dragon.bots import running_bot_id
 from dragon.memory import MemoryStore
 from dragon.schema import RiskLevel, ToolResult
 from dragon.tools.base import BaseTool, CallAssessment, int_arg
@@ -52,10 +58,11 @@ class Remember(BaseTool):
     async def execute(
         self, content: str = "", category: str = "general", replaces: str = "", **_: Any
     ) -> ToolResult:
+        owner = running_bot_id()
         try:
             if replaces:
                 old = self.store.get(replaces)
-                if old is None:
+                if old is None or old.owner not in (owner, "shared"):
                     return ToolResult.fail(f"no memory with id {replaces}")
                 change = self.store.replace(
                     [replaces], content, category=category or old.category, action="rewrite"
@@ -66,7 +73,7 @@ class Remember(BaseTool):
                     output=f"Updated {replaces} → {change.after.id}: {change.after.content}"
                 )
             # The same fact in other words: update that line rather than keep two.
-            for _score, twin in self.store.similar(content, threshold=0.8, limit=1):
+            for _score, twin in self.store.similar(content, threshold=0.8, limit=1, owner=owner):
                 if twin.content.strip() == content.strip():
                     break  # an exact repeat: add() hands back the existing line
                 change = self.store.replace(
@@ -77,13 +84,13 @@ class Remember(BaseTool):
                         output=f"Updated {twin.id} → {change.after.id}: {change.after.content} "
                         f"(was: {twin.content})"
                     )
-            item = self.store.add(content, category=category or "general")
+            item = self.store.add(content, category=category or "general", owner=owner)
         except ValueError as exc:
             return ToolResult.fail(str(exc))
         note = ""
         similar = [
             (s, m)
-            for s, m in self.store.similar(content, threshold=0.4, limit=2)
+            for s, m in self.store.similar(content, threshold=0.4, limit=2, owner=owner)
             if m.id != item.id
         ]
         if similar:
@@ -113,7 +120,9 @@ class Recall(BaseTool):
         return a
 
     async def execute(self, query: str = "", limit: int = 10, **_: Any) -> ToolResult:
-        items = await self.store.search_async(query, limit=int_arg(limit, 10, 1, 50))
+        items = await self.store.search_async(
+            query, limit=int_arg(limit, 10, 1, 50), owner=running_bot_id()
+        )
         if not items:
             return ToolResult(output="No matching memories.")
         return ToolResult(output="\n".join(i.render() for i in items))

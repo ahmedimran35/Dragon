@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from dragon import prompts
+from dragon.bots import DEFAULT_BOT_ID, current_bot, current_bot_id
 from dragon.calendar import CalendarFeeds
 from dragon.config import Settings
 from dragon.contacts import ContactBook
@@ -95,6 +96,7 @@ class DragonAgent:
         skills: SkillLibrary | None = None,
         session_file: Path | None = None,
         conversation_id: str | None = None,
+        bot: dict[str, Any] | None = None,
     ):
         self.settings = settings
         self.llm = llm
@@ -130,6 +132,20 @@ class DragonAgent:
         # Words for this conversation alone, read when the system prompt is built (the first
         # conversation's phase, dragon/server/firstrun.py); None or "" adds nothing.
         self.prompt_addendum: Callable[[], str] | None = None
+        # The bot this conversation speaks as (dragon/bots): its name, tone, style and
+        # standing instructions shape the system prompt, and its id owns the memories this
+        # run writes. An empty bot is the default bot.
+        self.bot: dict[str, Any] = dict(bot) if bot else {}
+
+    @property
+    def bot_id(self) -> str:
+        """The id of the bot this agent speaks as; ``"default"`` without one."""
+        return str(self.bot.get("id") or "").strip() or DEFAULT_BOT_ID
+
+    @property
+    def bot_name(self) -> str:
+        """Who the user sees: the bot's name, else the configured one."""
+        return " ".join(str(self.bot.get("name") or "").split()) or self.settings.agent.name
 
     def _drain_inbox(self) -> int:
         if self.inbox is None:
@@ -235,16 +251,19 @@ class DragonAgent:
 
     async def recall_for(self, user_input: str) -> list[MemoryItem] | None:
         """The memories to put in the system prompt for this message — by meaning too,
-        when an embedding endpoint is set up (that is the awaited part)."""
+        when an embedding endpoint is set up (that is the awaited part). Scoped to this
+        bot: its own memories and the shared ones, not another bot's."""
         if self.memory is None or not self.settings.memory.enabled:
             return None
         try:
             return await self.memory.relevant_async(
-                user_input, limit=self.settings.memory.max_inject
+                user_input, limit=self.settings.memory.max_inject, owner=self.bot_id
             )
         except Exception as exc:  # noqa: BLE001 — recall must never stop a turn
             logger.warning("recall failed ({}); using the keyword ranking", exc)
-            return self.memory.relevant(user_input, limit=self.settings.memory.max_inject)
+            return self.memory.relevant(
+                user_input, limit=self.settings.memory.max_inject, owner=self.bot_id
+            )
 
     def language_rule(self, user_input: str) -> str:
         """The `## Language` paragraph of the system prompt. A reply language set under
@@ -271,7 +290,9 @@ class DragonAgent:
             items = (
                 memories_
                 if memories_ is not None
-                else self.memory.relevant(user_input, limit=self.settings.memory.max_inject)
+                else self.memory.relevant(
+                    user_input, limit=self.settings.memory.max_inject, owner=self.bot_id
+                )
             )
             if items:
                 memories = prompts.MEMORY_SECTION.format(
@@ -320,8 +341,16 @@ class DragonAgent:
         addendum = (self.prompt_addendum() if self.prompt_addendum is not None else "").strip()
         if addendum:
             extra += f"\n## This conversation\n{addendum}\n"
+        # who this conversation speaks as: the thread's bot (dragon/bots), never the
+        # shared settings — one bot's persona must not leak into another bot's prompt
+        voice = prompts.bot_voice(self.bot)
         return prompts.SYSTEM_PROMPT.format(
-            name=a.name,
+            name=self.bot_name,
+            tagline=prompts.paragraph(voice["tagline"]),
+            tone=prompts.paragraph(voice["tone"]),
+            communication=prompts.paragraph(voice["communication"]),
+            style=prompts.paragraph(voice["style"]),
+            instructions=prompts.paragraph(voice["instructions"]),
             language_rule=language_rule,
             now=datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%A, UTC%z)"),
             workspace=str(a.workspace.resolve()),
@@ -408,6 +437,10 @@ class DragonAgent:
         final: str | None = None
         step = 0
         empty_replies = 0
+        # whose turn this is, for every tool call that needs the running bot (`remember`
+        # tags memories with it) and for the tools that show a bot's name
+        bot_token = current_bot_id.set(self.bot_id)
+        persona_token = current_bot.set(self.bot or None)
         task_token = self.sentinel.begin_task(
             purpose or user_input, conversation=self.conversation_id
         )
@@ -553,6 +586,8 @@ class DragonAgent:
         finally:
             llm_session.end_turn(turn_token)
             llm_session.leave(session_token)
+            current_bot.reset(persona_token)
+            current_bot_id.reset(bot_token)
             self.sentinel.end_task(task_token)
             self._save_session()
         return final or ""

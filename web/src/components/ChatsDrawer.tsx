@@ -1,6 +1,8 @@
-import { FileText, Home, MessageSquare, Search, Settings, SquarePen, Terminal, Trash2, X } from "lucide-react";
+import { FileText, Home, MessageSquare, Search, Settings, SquarePen, Terminal, Trash2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
+import { defaultBot } from "../bots";
+import { BotPicker } from "./BotPicker";
 import { useDeveloperTools } from "../devtools";
 import { useStore } from "../store";
 import type { ThreadMeta } from "../types";
@@ -38,6 +40,9 @@ export function ChatsDrawer() {
 
   const name = state.profile?.name || "Dragon";
   const developer = useDeveloperTools();
+  // which bot a new chat is with: the chosen one, else the default bot
+  const [pickedBot, setPickedBot] = useState("");
+  const botId = pickedBot || defaultBot(state.bots, state.profile).id;
   const side = useMemo(() => {
     const q = query.trim().toLowerCase();
     return state.threads
@@ -58,7 +63,7 @@ export function ChatsDrawer() {
   };
   const create = async () => {
     try {
-      const created = await api.createThread(t("New chat"));
+      const created = await api.createThread(t("New chat"), botId);
       dispatch({ type: "ws", msg: { kind: "thread", thread: created } });
       pick(created.id);
     } catch (e) {
@@ -87,6 +92,7 @@ export function ChatsDrawer() {
         {/* the main chat and the coding agents: rows, one tap away like a chat */}
         <Row icon={<Home size={20} />} label={t("Main chat")} selected={chatHere && state.activeThread === "main"} onClick={() => pick("main")} />
         {developer && <Row icon={<Terminal size={20} />} label={t("Coding agents")} selected={state.tab === "coding"} onClick={() => go("coding")} />}
+        <Row icon={<Users size={20} />} label={t("Bots")} selected={state.tab === "bots"} onClick={() => go("bots")} />
 
         <div className="mt-3 px-5 pb-1">
           <span className="text-[14px] font-medium text-muted">{t("Side chats")}</span>
@@ -115,7 +121,10 @@ export function ChatsDrawer() {
           </ul>
         )}
 
-        {/* bottom strip: settings · search · new */}
+        {/* who a new chat is with, then the bottom strip: settings · search · new */}
+        <div className="px-3.5 pt-1">
+          <BotPicker bots={state.bots} value={botId} onChange={setPickedBot} />
+        </div>
         <div className="flex items-center gap-2 border-t border-border px-3 pt-2 pb-2">
           <button type="button" onClick={() => go("you")} aria-label={t("Settings")} className="flex h-10 w-10 items-center justify-center rounded-full text-fg hover:bg-surface-2">
             <Settings size={20} />

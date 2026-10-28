@@ -2,7 +2,30 @@
 
 from __future__ import annotations
 
-SYSTEM_PROMPT = """You are {name}, a personal AI agent built on Dragon. You don't just answer questions; you get things done for the user: research and comparisons, planning, drafting and sending messages, managing files, running code, and tracking long-term goals.
+from collections.abc import Mapping
+from typing import Any
+
+# The persona vocabularies: how a bot talks (a tone), the length or shape of its replies
+# (a communication choice) and free text (its style). Each choice is its own paragraph of
+# the system prompt, so a change to one leaves the others alone. A bot picks one key of
+# each or "" for "not set"; the app's forms and the bot store share these dicts.
+TONES: dict[str, str] = {
+    "warm": (
+        "Tone: warm. Friendly and caring, the way a trusted friend talks; never chummy at "
+        "the expense of being clear."
+    ),
+    "formal": "Tone: formal. Polite and precise, no slang, no exclamation marks.",
+    "casual": "Tone: casual. Relaxed and friendly, the way a capable friend talks.",
+    "playful": "Tone: playful. Light and a little witty, never at the expense of being clear.",
+    "concise": "Tone: concise. Say what matters, then stop; no preamble, no recap.",
+}
+COMMUNICATION: dict[str, str] = {
+    "short": "Length: keep replies short, a few sentences, one or two paragraphs at most, unless asked for more.",
+    "detailed": "Length: be thorough; give the reasoning, the alternatives and what you ruled out.",
+    "bullets": "Shape: prefer bullet points and short headings over running prose; one idea per line.",
+}
+
+SYSTEM_PROMPT = """You are {name}, a personal AI agent built on Dragon. You don't just answer questions; you get things done for the user: research and comparisons, planning, drafting and sending messages, managing files, running code, and tracking long-term goals.{tagline}{tone}{communication}{style}{instructions}
 
 ## Language
 {language_rule}
@@ -310,10 +333,40 @@ def split_quiet(text: str) -> tuple[bool, str]:
     return False, text
 
 
+def paragraph(text: str) -> str:
+    """One prompt paragraph of ``text``, or "" when there is nothing to say. The leading
+    blank line is part of the value, so an unset persona leaves the prompt untouched."""
+    text = str(text or "").strip()
+    return "\n\n" + text if text else ""
+
+
+def bot_voice(bot: Mapping[str, Any] | None) -> dict[str, str]:
+    """The persona paragraphs of one bot (``dragon.bots``), for the system prompt.
+
+    Each key is one paragraph of its own ("" when the bot does not set it): the tagline,
+    the tone and communication choices, the free-text style, and the bot's own standing
+    instructions. Nothing here crosses over between bots: what one bot sets never lands
+    in another's prompt.
+    """
+    bot = bot or {}
+    tagline = " ".join(str(bot.get("tagline") or "").split())
+    style = str(bot.get("style") or "").strip()
+    return {
+        "tagline": f"Your tagline, the line under your name in the app: {tagline!r}"
+        if tagline
+        else "",
+        "tone": TONES.get(str(bot.get("tone") or "").strip().lower(), ""),
+        "communication": COMMUNICATION.get(str(bot.get("communication") or "").strip().lower(), ""),
+        "style": f"Your personality / style, in the user's own words: {style}" if style else "",
+        "instructions": str(bot.get("instructions") or "").strip(),
+    }
+
+
 __all__ = [
     "ADVANCE_GOAL_PROMPT",
     "CHECK_IN_PROMPT",
     "CALENDAR_SECTION",
+    "COMMUNICATION",
     "GOALS_SECTION",
     "LANGUAGE_AUTO",
     "LANGUAGE_FIXED",
@@ -327,9 +380,12 @@ __all__ = [
     "STUCK_PROMPT",
     "SURFACING",
     "SYSTEM_PROMPT",
+    "TONES",
     "TRIGGER_PROMPT",
     "USER_PROFILE_SECTION",
+    "bot_voice",
     "detect_language",
     "language_name",
+    "paragraph",
     "split_quiet",
 ]

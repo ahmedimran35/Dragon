@@ -1031,12 +1031,15 @@ def test_settings_and_profile(server, settings: Settings):
         },
     ).json()
     assert view["profile"]["name"] == "Veda" and view["sentinel"]["mode"] == "strict"
-    assert settings.agent.name == "Veda"
-    assert "warm and concise" in settings.agent.instructions
+    # the identity lives on the default bot and speaks through its system prompt
+    bot = service.list_bots()[0]
+    assert bot["name"] == "Veda" and bot["style"] == "warm and concise"
+    prompt = service.threads["main"].agent.build_system_prompt("hi")
+    assert "You are Veda" in prompt and "warm and concise" in prompt
     assert (settings.data_dir / "profile.json").exists()
     # a fresh service picks the profile up again
     fresh = DragonService(settings, llm=MockLLM([]))
-    assert fresh.profile.name == "Veda"
+    assert fresh.profile.name == "Veda" and fresh.list_bots()[0]["name"] == "Veda"
     assert (
         client.put("/api/settings", json={"sentinel_mode": "bogus"}).json()["sentinel"]["mode"]
         == "strict"
@@ -1067,12 +1070,13 @@ def test_identity_fields_each_get_a_paragraph(server, settings: Settings):
     assert len(view["name"]) == 20
     assert view["tagline"] == "Your day, sorted." and view["tone"] == "playful"
     assert view["communication"] == "bullets"
-    text = settings.agent.instructions
+    # the paragraphs land in the bot's system prompt, one per choice
+    text = service.threads["main"].agent.build_system_prompt("hi")
     assert "Tone: playful" in text and "Shape: prefer bullet points" in text
     assert "uses metric units" in text and "Your day, sorted." in text
     # each choice is its own paragraph: changing one leaves the others
     client.put("/api/settings", json={"profile": {"tone": "formal", "communication": "nonsense"}})
-    text = settings.agent.instructions
+    text = service.threads["main"].agent.build_system_prompt("hi")
     assert "Tone: formal" in text and "Tone: playful" not in text
     assert "Shape: prefer bullet points" not in text and "uses metric units" in text
     assert service.profile.communication == ""

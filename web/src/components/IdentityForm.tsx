@@ -1,5 +1,5 @@
 import { Shuffle } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { useT } from "../i18n";
 import type { Profile } from "../types";
 import { cx } from "../util";
@@ -21,6 +21,16 @@ export const COMMUNICATION = ["short", "detailed", "bullets"] as const;
 const TONE_LABELS: Record<(typeof TONES)[number], string> = { formal: "Formal", casual: "Casual", playful: "Playful", concise: "Concise" };
 const COMM_LABELS: Record<(typeof COMMUNICATION)[number], string> = { short: "Short replies", detailed: "Detailed", bullets: "Bullet points" };
 
+/** The word a stored tone stands for (a dictionary key), or null when it is unset or not one. */
+export function toneLabel(tone: string): string | null {
+  return (TONES as readonly string[]).includes(tone) ? TONE_LABELS[tone as (typeof TONES)[number]] : null;
+}
+
+/** The word a stored communication setting stands for, or null when it is unset or not one. */
+export function commLabel(communication: string): string | null {
+  return (COMMUNICATION as readonly string[]).includes(communication) ? COMM_LABELS[communication as (typeof COMMUNICATION)[number]] : null;
+}
+
 function pickSix(exclude: string, seed: number): string[] {
   const pool = SUGGESTED_NAMES.filter((n) => n !== exclude);
   // a deterministic shuffle from the seed, so a re-render does not reshuffle
@@ -34,18 +44,163 @@ function pickSix(exclude: string, seed: number): string[] {
   return out;
 }
 
-export function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+/** The small-caps label over a field or a pick group. */
+export function FieldLabel({ htmlFor, children }: { htmlFor?: string; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className={cx("rounded-full px-3 py-1.5 text-[13px] border transition-colors", active ? "border-accent bg-accent/10 text-accent font-medium" : "border-border text-muted")}>
+    <label htmlFor={htmlFor} className="block text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">
+      {children}
+    </label>
+  );
+}
+
+/** A pill choice: a tone, a length, a suggested name. Clicking the one that is set clears it. */
+export function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cx(
+        "rounded-full border px-3 py-1.5 text-[12.5px] transition-all active:scale-[0.97]",
+        active
+          ? "border-accent/25 bg-accent-soft font-semibold text-accent-soft-fg shadow-sm"
+          : "border-border/50 bg-surface text-muted hover:border-border hover:bg-surface-2 hover:text-fg",
+      )}
+    >
       {children}
     </button>
   );
 }
 
+/** One labelled group of pills on its warm tray. */
+function Segments({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="mt-1.5 flex flex-wrap gap-1 rounded-2xl border border-border/50 bg-surface-2/60 p-1">{children}</div>
+    </div>
+  );
+}
+
 /**
- * Who your Dragon is. Used on the first-run naming page and under Settings; the same
- * fields, the same limits as the server (`NAME_MAX`, `TAGLINE_MAX`, the tone and
- * communication vocabularies). An empty name falls back to "Dragon" on save.
+ * The name and the line under it: what the persona is called and what it says it is. The
+ * name ideas are a jump-off point, not a picker — anything sayable can be typed instead.
+ */
+export function IdentityNameFields({
+  value,
+  onChange,
+  inputCls,
+  suggestions = true,
+}: {
+  value: Identity;
+  onChange: (v: Identity) => void;
+  inputCls: string;
+  /** six shuffled name ideas and a shuffle button (the Bots screen; Settings has a name already) */
+  suggestions?: boolean;
+}) {
+  const t = useT();
+  const ids = useId();
+  const [seed, setSeed] = useState(7);
+  const names = useMemo(() => pickSix(value.name, seed), [value.name, seed]);
+  const set = (patch: Partial<Identity>) => onChange({ ...value, ...patch });
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel htmlFor={`${ids}-name`}>{t("Name")}</FieldLabel>
+        <input
+          id={`${ids}-name`}
+          value={value.name}
+          onChange={(e) => set({ name: e.target.value.slice(0, NAME_MAX) })}
+          maxLength={NAME_MAX}
+          className={cx(inputCls, "mt-1.5 text-[15px] font-semibold")}
+          placeholder="Dragon"
+          aria-label={t("Name")}
+          autoCapitalize="words"
+        />
+      </div>
+      <div>
+        <FieldLabel htmlFor={`${ids}-tagline`}>{t("Tagline")}</FieldLabel>
+        <input
+          id={`${ids}-tagline`}
+          value={value.tagline}
+          onChange={(e) => set({ tagline: e.target.value.slice(0, TAGLINE_MAX) })}
+          maxLength={TAGLINE_MAX}
+          className={cx(inputCls, "mt-1.5 text-[14px]")}
+          placeholder={t("A line under the name, e.g. Your day, sorted.")}
+          aria-label={t("Tagline")}
+        />
+      </div>
+      {suggestions && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {names.map((n) => (
+            <Chip key={n} active={value.name === n} onClick={() => set({ name: n })}>
+              {n}
+            </Chip>
+          ))}
+          <button
+            type="button"
+            onClick={() => setSeed((s) => s + 1)}
+            aria-label={t("More names")}
+            className="rounded-full border border-border/50 bg-surface p-1.5 text-muted transition hover:border-border hover:bg-surface-2 hover:text-fg"
+          >
+            <Shuffle size={14} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** How the persona talks: the tone, how much it says, and anything else about it. */
+export function IdentityVoice({
+  value,
+  onChange,
+  inputCls,
+}: {
+  value: Identity;
+  onChange: (v: Identity) => void;
+  inputCls: string;
+}) {
+  const t = useT();
+  const ids = useId();
+  const set = (patch: Partial<Identity>) => onChange({ ...value, ...patch });
+  return (
+    <div className="space-y-4">
+      <Segments label={t("Tone")}>
+        {TONES.map((tone) => (
+          <Chip key={tone} active={value.tone === tone} onClick={() => set({ tone: value.tone === tone ? "" : tone })}>
+            {t(TONE_LABELS[tone])}
+          </Chip>
+        ))}
+      </Segments>
+      <Segments label={t("How much it says")}>
+        {COMMUNICATION.map((c) => (
+          <Chip key={c} active={value.communication === c} onClick={() => set({ communication: value.communication === c ? "" : c })}>
+            {t(COMM_LABELS[c])}
+          </Chip>
+        ))}
+      </Segments>
+      <div>
+        <FieldLabel htmlFor={`${ids}-style`}>{t("Anything else about how it should be")}</FieldLabel>
+        <textarea
+          id={`${ids}-style`}
+          value={value.style}
+          onChange={(e) => set({ style: e.target.value })}
+          rows={2}
+          placeholder={t("e.g. A little witty. Uses metric units. Never uses emoji.")}
+          className={cx(inputCls, "mt-1.5 resize-none text-[14px]")}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Who a persona is: its name, tagline, face and voice. Used to edit the selected bot's
+ * persona on the Bots screen, and on the first-run naming page and under Settings for the
+ * runtime's own profile; the same fields, the same limits as the server (`NAME_MAX`,
+ * `TAGLINE_MAX`, the tone and communication vocabularies). An empty name falls back to
+ * "Dragon" on save.
  */
 export function IdentityForm({
   value,
@@ -65,8 +220,6 @@ export function IdentityForm({
 }) {
   const t = useT();
   const ids = useId();
-  const [seed, setSeed] = useState(7);
-  const names = useMemo(() => pickSix(value.name, seed), [value.name, seed]);
   const set = (patch: Partial<Identity>) => onChange({ ...value, ...patch });
   const preview = { ...value, proactivity: "default" as const, proactive: true, goal_interval_minutes: 60, quiet_hours: "" };
 
@@ -74,79 +227,18 @@ export function IdentityForm({
     <div className="space-y-5">
       <div className="flex items-start gap-4">
         <Avatar profile={preview} size={72} />
-        <div className="flex-1 min-w-0 space-y-2">
-          <div>
-            <input
-              value={value.name}
-              onChange={(e) => set({ name: e.target.value.slice(0, NAME_MAX) })}
-              maxLength={NAME_MAX}
-              className={cx(inputCls, "text-[17px] font-medium")}
-              placeholder="Dragon"
-              aria-label={t("Name")}
-              autoCapitalize="words"
-            />
-          </div>
-          <input
-            value={value.tagline}
-            onChange={(e) => set({ tagline: e.target.value.slice(0, TAGLINE_MAX) })}
-            maxLength={TAGLINE_MAX}
-            className={cx(inputCls, "text-[14px]")}
-            placeholder={t("A line under the name, e.g. Your day, sorted.")}
-            aria-label={t("Tagline")}
-          />
+        <div className="flex-1 min-w-0">
+          <IdentityNameFields value={value} onChange={onChange} inputCls={inputCls} suggestions={suggestions} />
         </div>
       </div>
-
-      {suggestions && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {names.map((n) => (
-            <Chip key={n} active={value.name === n} onClick={() => set({ name: n })}>
-              {n}
-            </Chip>
-          ))}
-          <button type="button" onClick={() => setSeed((s) => s + 1)} aria-label={t("More names")} className="rounded-full border border-border p-1.5 text-muted">
-            <Shuffle size={14} />
-          </button>
-        </div>
-      )}
 
       <AvatarPicker value={{ avatar: value.avatar, emoji: value.emoji, color: value.color }} onChange={(look) => set(look)} onStudio={onStudio} />
 
-      <div>
-        <label className="text-[12px] text-muted">{t("Tone")}</label>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {TONES.map((tone) => (
-            <Chip key={tone} active={value.tone === tone} onClick={() => set({ tone: value.tone === tone ? "" : tone })}>
-              {t(TONE_LABELS[tone])}
-            </Chip>
-          ))}
-        </div>
-      </div>
-      <div>
-        <label className="text-[12px] text-muted">{t("How much it says")}</label>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {COMMUNICATION.map((c) => (
-            <Chip key={c} active={value.communication === c} onClick={() => set({ communication: value.communication === c ? "" : c })}>
-              {t(COMM_LABELS[c])}
-            </Chip>
-          ))}
-        </div>
-      </div>
-      <div>
-        <label htmlFor={`${ids}-style`} className="text-[12px] text-muted">{t("Anything else about how it should be")}</label>
-        <textarea
-          id={`${ids}-style`}
-          value={value.style}
-          onChange={(e) => set({ style: e.target.value })}
-          rows={2}
-          placeholder={t("e.g. A little witty. Uses metric units. Never uses emoji.")}
-          className={cx(inputCls, "mt-1 resize-none text-[14px]")}
-        />
-      </div>
+      <IdentityVoice value={value} onChange={onChange} inputCls={inputCls} />
       {askUserName && (
         <div>
-          <label htmlFor={`${ids}-user`} className="text-[12px] text-muted">{t("What it calls you")}</label>
-          <input id={`${ids}-user`} value={value.user_name} onChange={(e) => set({ user_name: e.target.value })} maxLength={60} placeholder={t("Your name")} className={cx(inputCls, "mt-1 text-[14px]")} />
+          <FieldLabel htmlFor={`${ids}-user`}>{t("What it calls you")}</FieldLabel>
+          <input id={`${ids}-user`} value={value.user_name} onChange={(e) => set({ user_name: e.target.value })} maxLength={60} placeholder={t("Your name")} className={cx(inputCls, "mt-1.5 text-[14px]")} />
         </div>
       )}
     </div>

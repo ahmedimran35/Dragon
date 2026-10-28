@@ -14,6 +14,7 @@ import { cx } from "./util";
 // the first time it is shown, so the first paint does not carry the provider form or the
 // coding console.
 const AvatarStudioScreen = lazy(() => import("./screens/AvatarStudioScreen").then((m) => ({ default: m.AvatarStudioScreen })));
+const BotsScreen = lazy(() => import("./screens/BotsScreen").then((m) => ({ default: m.BotsScreen })));
 const ChannelsScreen = lazy(() => import("./screens/ChannelsScreen").then((m) => ({ default: m.ChannelsScreen })));
 const CodingScreen = lazy(() => import("./screens/CodingScreen").then((m) => ({ default: m.CodingScreen })));
 const ConnectionsScreen = lazy(() => import("./screens/ConnectionsScreen").then((m) => ({ default: m.ConnectionsScreen })));
@@ -59,7 +60,7 @@ export default function App() {
       const raw = window.location.hash.slice(1);
       const wanted = (raw === "ideas" ? "tasks" : raw) as Tab;
       if (wanted && TABS.some((x) => x.id === wanted)) setTab(wanted);
-      else if (wanted === "memory" || wanted === "connections" || wanted === "channels" || wanted === "skills" || wanted === "coding" || wanted === "avatar") setTab(wanted);
+      else if (wanted === "memory" || wanted === "connections" || wanted === "channels" || wanted === "skills" || wanted === "coding" || wanted === "avatar" || wanted === "bots") setTab(wanted);
     };
     jump();
     window.addEventListener("hashchange", jump);
@@ -118,6 +119,7 @@ export default function App() {
             {state.tab === "you" && <SettingsScreen />}
             {state.tab === "coding" && <CodingScreen />}
             {state.tab === "avatar" && <AvatarStudioScreen />}
+            {state.tab === "bots" && <BotsScreen />}
           </Suspense>
         </main>
         {/* Dragon's bottom bar: a floating frosted-glass pill, five glyphs, icons only. */}

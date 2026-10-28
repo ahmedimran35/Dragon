@@ -1,6 +1,7 @@
 import type {
   ActivityData,
   AttachmentInfo,
+  Bot,
   CalendarData,
   ChatGptLogin,
   ChatGptStatus,
@@ -148,10 +149,12 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
  * What a refused reply says to the person: the runtime's `detail` when it is a sentence (the
  * screens translate the ones they know), otherwise one sentence for the status. A validation
  * error's `detail` is a list and a crashed route sends no JSON; neither is shown as it came,
- * and the status number never is.
+ * and the status number never is. Some routes (the bots) refuse with `{"error": "…"}`; a
+ * sentence of theirs on a 4xx is shown the same way `detail` is.
  */
 export function failureDetail(status: number, data: unknown): string {
-  const detail = data && typeof data === "object" ? (data as { detail?: unknown }).detail : undefined;
+  const body = data && typeof data === "object" ? (data as { detail?: unknown; error?: unknown }) : undefined;
+  const detail = body?.detail ?? (status < 500 ? body?.error : undefined);
   if (typeof detail === "string" && detail.trim()) return detail;
   return status >= 500 ? "Your Dragon hit a problem; try again in a moment." : "Your Dragon could not do that.";
 }
@@ -195,8 +198,18 @@ export const api = {
     request<HoldEvent>("/api/holds", json({ thread, tool, reason })),
   doneHold: (id: string) => request<HoldEvent>(`/api/holds/${encodeURIComponent(id)}/done`, json({})),
   health: () => request<{ ok: boolean; version: string; auth: boolean }>("/api/health"),
+  // ---- bots: the personas the person chats with; the default bot's id is "default"
+  bots: () => request<{ bots: Bot[] }>("/api/bots"),
+  /** `name` is required; the rest of the Bot fields are optional here. 201 with the bot. */
+  createBot: (body: Partial<Bot> & { name: string }) => request<{ bot: Bot }>("/api/bots", json(body)),
+  updateBot: (id: string, body: Partial<Bot>) =>
+    request<{ bot: Bot }>(`/api/bots/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  /** 400 {"error": …} when the default bot or the last bot would go; 404 for an unknown id. */
+  deleteBot: (id: string) => request<{ ok: boolean }>(`/api/bots/${encodeURIComponent(id)}`, { method: "DELETE" }),
   threads: () => request<ThreadMeta[]>("/api/threads"),
-  createThread: (title: string) => request<ThreadMeta>("/api/threads", json({ title })),
+  /** A new chat. `botId` names the bot it is with; "" (the default) leaves it to the runtime. */
+  createThread: (title: string, botId = "") =>
+    request<ThreadMeta>("/api/threads", json(botId ? { title, bot_id: botId } : { title })),
   renameThread: (id: string, title: string) =>
     request<ThreadMeta>(`/api/threads/${id}`, { method: "PATCH", body: JSON.stringify({ title }) }),
   deleteThread: (id: string) => request<{ ok: boolean }>(`/api/threads/${id}`, { method: "DELETE" }),

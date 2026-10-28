@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dragon.bots import running_bot
 from dragon.config import SentinelSettings
 from dragon.logger import logger
 from dragon.schema import RiskLevel, ToolCall, ToolResult
@@ -34,11 +35,15 @@ from dragon.vault import PLACEHOLDER_RE, CredentialVault
 class TaskContext:
     """The agent run a tool call belongs to: gives approvals a purpose, and the
     conversation the run is part of gives them their middle scope. A run outside any
-    conversation (``dragon run``, a scheduled job) stands in for one itself."""
+    conversation (``dragon run``, a scheduled job) stands in for one itself. ``bot_name``
+    and ``bot_id`` name the bot the run speaks as: approval prompts say "Let <bot> use
+    <App>?" under its name, and every audit entry is tagged with its id."""
 
     id: str
     purpose: str = ""
     conversation: str = ""
+    bot_name: str = ""
+    bot_id: str = ""
 
     @property
     def conversation_id(self) -> str:
@@ -103,15 +108,30 @@ class Sentinel:
 
     # ------------------------------------------------------------------ task scope
     def begin_task(
-        self, purpose: str = "", task_id: str | None = None, conversation: str | None = None
+        self,
+        purpose: str = "",
+        task_id: str | None = None,
+        conversation: str | None = None,
+        bot_name: str = "",
+        bot_id: str = "",
+        context: TaskContext | None = None,
     ) -> Any:
         """Mark the start of an agent run, within ``conversation`` when it has one.
-        Returns a token for :meth:`end_task`."""
-        ctx = TaskContext(
+        ``bot_name``/``bot_id`` name the bot the run speaks as (a ready-made ``context`` is
+        taken as it stands); when neither is given, the bot of the running turn
+        (:mod:`dragon.bots`) fills them. Returns a token for :meth:`end_task`."""
+        ctx = context or TaskContext(
             id=task_id or uuid.uuid4().hex[:10],
             purpose=purpose.strip()[:200],
             conversation=(conversation or "").strip(),
+            bot_name=(bot_name or "").strip(),
+            bot_id=(bot_id or "").strip(),
         )
+        if not ctx.bot_name or not ctx.bot_id:
+            bot = running_bot()
+            if bot:
+                ctx.bot_name = ctx.bot_name or str(bot.get("name") or "")
+                ctx.bot_id = ctx.bot_id or str(bot.get("id") or "")
         return _current_task.set(ctx)
 
     def end_task(self, token: Any) -> None:
@@ -158,10 +178,12 @@ class Sentinel:
     APP_TOOL = "computer_app"
 
     async def allow_app(self, app_id: str, label: str = "", dragon: str = "Dragon") -> bool:
-        """The hands' first action in an application asks: "Let <Dragon> use <App>?" — once,
-        for this conversation, or always. The answer is a grant under
-        ``computer_app:<bundle id or name>``, so the Permissions page lists and revokes it
-        like any other, and ``[sentinel] mode = "auto"`` skips it like any other."""
+        """The hands' first action in an application asks: "Let <name> use <App>?" — once,
+        for this conversation, or always. ``<name>`` is the bot the run speaks as when it
+        has one, else the agent's own name as the caller has it. The answer is a grant
+        under ``computer_app:<bundle id or name>``, so the Permissions page lists and
+        revokes it like any other, and ``[sentinel] mode = "auto"`` skips it like any
+        other."""
         app_id = app_id.strip()[:120]
         if not app_id:
             return True
@@ -169,6 +191,7 @@ class Sentinel:
         key = grant_key(self.APP_TOOL, app_id)
         task = _current_task.get()
         conversation = task.conversation_id if task else None
+        who = (task.bot_name if task and task.bot_name else "") or dragon or "Dragon"
         if self.settings.mode == "auto":
             return True
         grant = self.grants.match(key, conversation)
@@ -177,7 +200,7 @@ class Sentinel:
         request = ApprovalRequest(
             tool=self.APP_TOOL,
             args={"app": app_id, "name": label},
-            summary=f"Let {dragon} use {label}?",
+            summary=f"Let {who} use {label}?",
             risk=RiskLevel.MODERATE,
             reasons=["the first action in this application"],
             purpose=task.purpose if task else "",

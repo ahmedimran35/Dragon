@@ -11,6 +11,24 @@ def test_the_system_prompt_does_all_web_work_in_the_browser():
     assert "is read in the browser like anything else" in SYSTEM_PROMPT
 
 
+def test_the_system_prompt_takes_the_bots_persona():
+    from dragon.prompts import COMMUNICATION, SYSTEM_PROMPT, TONES, bot_voice, paragraph
+
+    # the system prompt is parameterised by the bot's persona, one slot per part
+    for slot in ("{tagline}", "{tone}", "{communication}", "{style}", "{instructions}"):
+        assert slot in SYSTEM_PROMPT
+    assert TONES.keys() >= {"warm", "formal", "casual", "playful", "concise"}
+    assert COMMUNICATION.keys() >= {"short", "detailed", "bullets"}
+
+    voice = bot_voice({"tone": "warm", "style": "dry", "instructions": "Cite sources."})
+    assert voice["tone"] == TONES["warm"] and "dry" in voice["style"]
+    assert voice["instructions"] == "Cite sources." and voice["tagline"] == ""
+    # an unset persona adds nothing at all: the prompt reads as it always did
+    assert all(v == "" for v in bot_voice({}).values())
+    assert all(v == "" for v in bot_voice(None).values())
+    assert paragraph("") == "" and paragraph("  x  ") == "\n\nx"
+
+
 def test_the_light_web_tools_are_the_fallback_only():
     for tool in (WebSearch(), WebFetch()):
         assert "fallback" in tool.description
