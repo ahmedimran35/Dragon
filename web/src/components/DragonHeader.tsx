@@ -41,7 +41,7 @@ export function DragonHeader({
   onName?: () => void;
   leading?: ReactNode;
   trailing?: ReactNode;
-  /** a chip under the tag (the side chat's title) */
+  /** a chip beside the name (the chief mark, a side chat's title) */
   under?: ReactNode;
   size?: number;
   className?: string;
@@ -49,9 +49,16 @@ export function DragonHeader({
   scrim?: boolean;
 }) {
   return (
-    <header className={cx("safe-top relative shrink-0 pt-1.5 pb-1", scrim ? "header-scrim" : "bg-bg", className)}>
-      <div className="flex flex-col items-center px-16">
-        <button type="button" onClick={onAvatar} aria-label={name} className="relative rounded-full">
+    <header
+      className={cx(
+        "safe-top relative shrink-0 border-b border-border/60 bg-surface/95 backdrop-blur-md shadow-sm",
+        scrim ? "header-scrim" : "",
+        className,
+      )}
+    >
+      <div className="flex items-center gap-3 px-5 py-3">
+        {leading && <div className="shrink-0">{leading}</div>}
+        <button type="button" onClick={onAvatar} aria-label={name} className="relative shrink-0 rounded-full bg-accent-soft ring-1 ring-border/40">
           <Avatar profile={profile} status={status} size={size} />
           {badge !== undefined && badge > 0 && (
             <span className="pointer-events-none absolute -right-0.5 top-0 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-bg bg-rose-500 px-1 text-[10.5px] font-bold text-white">
@@ -59,14 +66,22 @@ export function DragonHeader({
             </span>
           )}
         </button>
-        {/* the tag rides up over the chin; its area is fixed so the bar keeps its height */}
-        <div className="relative z-10 -mt-2.5 flex min-h-[44px] flex-col items-center">
-          <DragonNamePill name={name} statusLine={statusLine} statusTone={statusTone} spinning={spinning} onClick={onName ?? onAvatar} />
-          {under && <div className="mt-1.5 flex max-w-full items-center">{under}</div>}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onName ?? onAvatar} className="min-w-0 text-left">
+              <span className="block truncate text-[18px] font-semibold tracking-tight text-fg">{name}</span>
+            </button>
+            {under && <div className="flex shrink-0 items-center gap-1.5">{under}</div>}
+          </div>
+          {statusLine && (
+            <div className={cx("mt-0.5 flex items-center gap-1 text-[12.5px] leading-tight", statusTone === "accent" ? "text-accent" : "text-muted")}>
+              {spinning && <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border-[1.5px] border-current border-t-transparent" />}
+              <span className="truncate">{statusLine}</span>
+            </div>
+          )}
         </div>
+        {trailing && <div className="shrink-0">{trailing}</div>}
       </div>
-      {leading && <div className="absolute left-4 top-1.5 safe-top">{leading}</div>}
-      {trailing && <div className="absolute right-4 top-1.5 safe-top flex items-center gap-2">{trailing}</div>}
     </header>
   );
 }

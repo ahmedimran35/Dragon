@@ -155,7 +155,7 @@ export function ChatScreen() {
     if (!chief && !titled) return undefined;
     return (
       <>
-        {chief && <ChiefBadge />}
+        {chief && <ChiefBadge compact />}
         {titled && (
           <span className={cx("truncate rounded-full bg-surface-2 px-2.5 py-0.5 text-[11.5px] font-medium text-fg/80", chief && "ml-1.5")}>
             {thread?.title}
@@ -214,15 +214,16 @@ export function ChatScreen() {
           }
           trailing={<MoreMenu actions={[{ label: t("Coding agents"), onClick: () => setTab("coding") }]} />}
           under={under}
-          className="border-b border-border/60 bg-surface/90 backdrop-blur"
+          size={56}
+          className="shadow-sm"
         />
       </div>
       {/* while reading older messages the top edge fades fully into the canvas, under the header */}
-      <div aria-hidden className="list-fade-top pointer-events-none absolute inset-x-0 top-0 z-[5] h-20" style={{ opacity: scrolledUp ? 1 : 0 }} />
+      <div aria-hidden className="list-fade-top pointer-events-none absolute inset-x-0 top-0 z-[5] h-24" style={{ opacity: scrolledUp ? 1 : 0 }} />
 
       {/* Timeline */}
-      <div ref={listRef} onScroll={measure} className="relative flex-1 overflow-y-auto px-4 pb-3">
-        <div ref={contentRef} className="space-y-4">
+      <div ref={listRef} onScroll={measure} className="relative flex-1 overflow-y-auto px-5 pb-3">
+        <div ref={contentRef} className="space-y-0">
           {/* the room the header takes; the first message starts under it, not behind it */}
           <div aria-hidden style={{ height: headerHeight }} />
           {state.hasMore[activeThread] && events.length > 0 && (
@@ -280,7 +281,7 @@ export function ChatScreen() {
           <button
             type="button"
             onClick={jumpToBottom}
-            className="sticky bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-ink text-ink-fg shadow px-3 py-1.5 text-[12.5px] font-medium flex items-center gap-1"
+            className="sticky bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-ink text-ink-fg shadow-lg px-4 py-2 text-[12.5px] font-medium flex items-center gap-1"
           >
             <ChevronDown size={14} /> {t("Latest")}
             {pendingApprovals ? ` · ${pendingApprovals > 1 ? t("{n} approvals", { n: pendingApprovals }) : t("1 approval")}` : ""}
@@ -365,10 +366,12 @@ function EventView({
     }
   })();
   if (!body) return null;
+  const sameSender =
+    (prev?.type === "user" && event.type === "user") || (prev?.type === "assistant" && event.type === "assistant");
   return (
     <>
       {divider}
-      {body}
+      <div className={cx(prev ? (sameSender ? "mt-2" : "mt-5") : "")}>{body}</div>
     </>
   );
 }
@@ -423,8 +426,8 @@ function UserBubble({ event, onOpenFile }: { event: UserEvent; onOpenFile: (path
         </button>
       ))}
       {event.text && (
-        <div className="bubble-user max-w-[85%] rounded-3xl bg-bubble-user px-4 py-2.5 text-bubble-user-fg sm:max-w-[75%]">
-          <div className="md text-[15px] leading-[1.45] whitespace-pre-wrap break-words">{event.text}</div>
+        <div className="bubble-user max-w-[88%] rounded-3xl bg-bubble-user px-4 py-3 text-bubble-user-fg shadow-sm sm:max-w-[78%]">
+          <div className="md text-[15px] leading-relaxed whitespace-pre-wrap break-words">{event.text}</div>
         </div>
       )}
     </div>
@@ -495,14 +498,16 @@ function AssistantBubble({
               <Markdown text={b.text} files={files} onOpenFile={onOpenFile} />
             </div>
           ) : (
-            <div key={i} className="my-1 max-w-[85%] rounded-3xl bg-bubble-agent px-4 py-2.5 sm:max-w-[75%]">
-              <Markdown text={b.text} files={files} onOpenFile={onOpenFile} />
+            <div key={i} className="my-1 max-w-[88%] rounded-3xl border border-border/60 bg-surface px-4 py-3 shadow-sm sm:max-w-[78%]">
+              <div className="md text-[15px] leading-relaxed">
+                <Markdown text={b.text} files={files} onOpenFile={onOpenFile} />
+              </div>
               {streaming && i === blocks.length - 1 && <span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-accent/70 animate-pulse rounded-sm" />}
             </div>
           ),
         )}
         {blocks.length === 0 && streaming && (
-          <div className="my-1 max-w-[85%] rounded-3xl bg-bubble-agent px-4 py-2.5 sm:max-w-[75%]">
+          <div className="my-1 max-w-[88%] rounded-3xl border border-border/60 bg-surface px-4 py-3 shadow-sm sm:max-w-[78%]">
             <span className="inline-block w-1.5 h-4 align-middle bg-accent/70 animate-pulse rounded-sm" />
           </div>
         )}
@@ -532,7 +537,7 @@ function TypingIndicator({ label }: { label?: string }) {
   const t = useT();
   return (
     <div className="flex items-center gap-2" role="status">
-      <div aria-hidden className="rounded-3xl rounded-bl-md bg-bubble-agent px-4 py-2.5 flex items-center gap-1">
+      <div aria-hidden className="rounded-3xl border border-border/60 bg-surface px-4 py-3 shadow-sm flex items-center gap-1">
         <span className="typing-dot h-2 w-2 rounded-full bg-muted" />
         <span className="typing-dot h-2 w-2 rounded-full bg-muted" />
         <span className="typing-dot h-2 w-2 rounded-full bg-muted" />
@@ -584,15 +589,14 @@ function EmptyChat({ name, onSend }: { name: string; onSend: (text: string) => v
   // The face is already in the header above; here the agent speaks.
   return (
     <div className="mx-auto mt-6 w-full max-w-md">
-      <div className="overflow-hidden rounded-3xl border border-border/60 bg-surface shadow-sm">
-        <div className="relative px-6 py-8 text-center">
-          <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-accent-soft via-accent-soft/30 to-transparent" />
+      <div className="overflow-hidden rounded-3xl border border-border/60 bg-surface shadow-md">
+        <div className="relative px-6 py-8 text-center bg-gradient-to-br from-accent-soft via-accent-soft/30 to-transparent">
           <div className="relative flex flex-col items-center gap-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-accent shadow-sm ring-1 ring-border/40">
-              <Bot size={28} />
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent-soft text-accent shadow-sm ring-1 ring-border/40">
+              <Bot size={32} />
             </div>
-            <div className="text-[20px] font-semibold">{t("Hi, I'm {name}.", { name })}</div>
-            <p className="text-muted text-[14.5px] leading-snug max-w-sm">
+            <div className="text-[22px] font-semibold tracking-tight">{t("Hi, I'm {name}.", { name })}</div>
+            <p className="text-muted text-[14.5px] leading-relaxed max-w-sm">
               {t("I don't just answer; I get things done: research, plans, files, code, email, long-running goals. Everything I do shows up here, and anything hard to undo waits for your approval.")}
             </p>
           </div>
@@ -604,9 +608,10 @@ function EmptyChat({ name, onSend }: { name: string; onSend: (text: string) => v
                 key={s}
                 type="button"
                 onClick={() => onSend(s)}
-                className="rounded-2xl border border-border/55 bg-surface px-3.5 py-2.5 text-left text-[13px] transition-all duration-150 hover:-translate-y-0.5 hover:border-border hover:shadow-md active:scale-[0.98]"
+                className="flex items-center justify-between gap-2 rounded-2xl border border-border/55 bg-surface px-4 py-3 text-left text-[13.5px] transition-all duration-150 hover:-translate-y-0.5 hover:border-border hover:shadow-md active:scale-[0.98]"
               >
-                {s}
+                <span>{s}</span>
+                <span className="text-muted">→</span>
               </button>
             ))}
           </div>
@@ -772,7 +777,7 @@ export function Composer({
   };
 
   return (
-    <form onSubmit={submit} className="shrink-0 bg-bg px-3 pt-1.5 pb-1">
+    <form onSubmit={submit} className="shrink-0 bg-bg px-3 pt-2 pb-2">
       {busy && !waiting && (
         <div className="px-2 pb-1 text-[12px] text-muted">{t("{name} is working; anything you send now is picked up right away.", { name })}</div>
       )}
@@ -794,7 +799,7 @@ export function Composer({
       {pending.length > 0 && (
         <div className="mb-1 flex gap-2.5 overflow-x-auto px-1 pt-2.5 pb-1 pr-3" role="list" aria-label={t("Attachments")}>
           {pending.map((p) => (
-            <div key={p.key} role="listitem" className={cx("relative shrink-0 rounded-2xl border bg-surface-2 shadow-sm", p.error ? "border-danger/60" : "border-border/70")}>
+            <div key={p.key} role="listitem" className={cx("relative shrink-0 rounded-2xl border bg-surface-2 shadow-sm", p.error ? "border-danger/60" : "border-border/60")}>
               {p.preview ? (
                 <img src={p.preview} alt={p.file.name} className="h-16 w-16 rounded-2xl object-cover" />
               ) : (
@@ -823,7 +828,7 @@ export function Composer({
           ))}
         </div>
       )}
-      <div className="flex items-end gap-2 rounded-[28px] border border-border/60 bg-surface px-2 py-2 shadow-[0_2px_16px_-6px_rgba(0,0,0,0.12)] focus-within:ring-2 focus-within:ring-accent/30">
+      <div className="flex items-end gap-2 rounded-3xl border border-border/60 bg-surface px-3 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.18)] focus-within:ring-2 focus-within:ring-accent/40">
         <input
           ref={fileRef}
           type="file"
@@ -877,7 +882,7 @@ export function Composer({
             onClick={stop}
             disabled={stopping}
             aria-label={t("Stop")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-ink-fg transition active:scale-95 disabled:opacity-60"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg shadow-sm transition hover:scale-105 active:scale-95 disabled:opacity-60"
           >
             <Square size={15} fill="currentColor" strokeWidth={0} />
           </button>
@@ -888,8 +893,8 @@ export function Composer({
             aria-label={t("Send")}
             className={cx(
               // the ink disc: black with a white arrow in the light theme, inverted in the dark
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition active:scale-95",
-              text.trim() || attached.length > 0 ? "bg-ink text-ink-fg" : "bg-surface-2 text-muted",
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition hover:scale-105 active:scale-95",
+              text.trim() || attached.length > 0 ? "bg-accent text-accent-fg shadow-sm" : "bg-surface-2 text-muted",
               "disabled:opacity-60",
             )}
           >
