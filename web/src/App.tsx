@@ -128,7 +128,7 @@ export default function App() {
         </main>
         {/* Dragon's bottom bar: a floating frosted-glass pill, five glyphs, icons only. */}
         <nav className={cx("tabbar-float pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3", !state.lite && "wide:hidden")}>
-          <ul className="pointer-events-auto flex w-full max-w-[420px] items-center gap-0.5 rounded-full bg-surface-2/55 px-3.5 py-1.5 ring-1 ring-border/50 backdrop-blur-2xl">
+          <ul className="pointer-events-auto flex w-full max-w-[420px] items-center gap-0.5 rounded-full bg-surface-2/55 px-3.5 py-2 ring-1 ring-border/50 backdrop-blur-3xl">
             {TABS.map((tab) => {
               const active = state.tab === tab.id;
               const badge = tab.id === "chat" ? pendingApprovals : tab.id === "feed" ? feedUnseen : tab.id === "goals" ? proposals : tab.id === "tasks" ? pendingApprovals + proposals : 0;
@@ -139,9 +139,9 @@ export default function App() {
                     onClick={() => setTab(tab.id)}
                     aria-label={t(tab.label)}
                     aria-current={active ? "page" : undefined}
-                    className={cx("flex h-[46px] w-full items-center justify-center", active ? "text-ink-fg" : "text-muted hover:text-fg")}
+                    className={cx("flex h-[46px] w-full items-center justify-center", active ? "text-accent-fg" : "text-muted hover:text-fg")}
                   >
-                    <span className={cx("relative flex h-[46px] w-full max-w-[60px] items-center justify-center rounded-full transition-colors duration-300", active && "bg-ink")}>
+                    <span className={cx("relative flex h-[46px] w-full max-w-[60px] items-center justify-center rounded-full transition-colors duration-300", active && "bg-accent")}>
                       {tab.icon(active)}
                       {badge > 0 && (
                         <span className="absolute right-2.5 top-1 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">

@@ -59,13 +59,13 @@ export function Sidebar() {
   useMenuKeys(menuRef, menuOpen, () => setMenuOpen(false));
 
   const rail: Array<{ id: Tab; label: string; icon: ReactNode; badge?: number }> = [
-    { id: "chat", label: "Chat", icon: <MessageCircle size={21} />, badge: pendingApprovals },
-    { id: "feed", label: "Feed", icon: <Newspaper size={21} />, badge: feedUnseen },
-    { id: "tasks", label: "Tasks", icon: <ListChecks size={21} />, badge: pendingApprovals + proposals },
-    { id: "goals", label: "Goals", icon: <SquareCheckBig size={21} />, badge: proposals },
-    { id: "library", label: "Library", icon: <LayoutGrid size={21} /> },
-    { id: "bots", label: "Bots", icon: <Users size={21} /> },
-    ...(developer ? [{ id: "coding" as Tab, label: "Coding", icon: <TerminalSquare size={21} /> }] : []),
+    { id: "chat", label: "Chat", icon: <MessageCircle size={22} />, badge: pendingApprovals },
+    { id: "feed", label: "Feed", icon: <Newspaper size={22} />, badge: feedUnseen },
+    { id: "tasks", label: "Tasks", icon: <ListChecks size={22} />, badge: pendingApprovals + proposals },
+    { id: "goals", label: "Goals", icon: <SquareCheckBig size={22} />, badge: proposals },
+    { id: "library", label: "Library", icon: <LayoutGrid size={22} /> },
+    { id: "bots", label: "Bots", icon: <Users size={22} /> },
+    ...(developer ? [{ id: "coding" as Tab, label: "Coding", icon: <TerminalSquare size={22} /> }] : []),
   ];
 
   const q = query.trim().toLowerCase();
@@ -75,8 +75,8 @@ export function Sidebar() {
 
   const railButton = (active: boolean) =>
     cx(
-      "relative flex w-[60px] flex-col items-center gap-[3px] rounded-xl py-1.5 text-[10.5px] font-medium leading-none transition",
-      active ? "bg-surface-2 text-fg" : "text-fg/65 hover:bg-surface-2/60 hover:text-fg",
+      "relative flex w-[60px] flex-col items-center gap-[3px] rounded-2xl py-2 text-[10.5px] font-medium leading-none transition-all duration-150",
+      active ? "bg-accent-soft/60 text-fg" : "text-fg/65 hover:bg-surface-2/60 hover:text-fg",
     );
 
   return (
@@ -125,7 +125,7 @@ export function Sidebar() {
             className={cx(railButton(state.browserOpen), state.browserOpen && "bg-surface-2 text-fg")}
           >
             <span className="relative">
-              <Globe size={21} className={state.browserOpen ? "text-accent" : "text-fg/60"} />
+              <Globe size={22} className={state.browserOpen ? "text-accent" : "text-fg/60"} />
               {state.browser.latest?.status === "live" && (
                 <span className="absolute -right-1 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-rose-500" />
               )}
@@ -133,12 +133,12 @@ export function Sidebar() {
             <span className="max-w-full truncate">{t("Browser")}</span>
           </button>
           <button type="button" onClick={() => setTab("you")} aria-current={state.tab === "you" ? "page" : undefined} className={railButton(state.tab === "you")}>
-            <SlidersHorizontal size={21} className={state.tab === "you" ? "text-accent" : "text-fg/60"} />
+            <SlidersHorizontal size={22} className={state.tab === "you" ? "text-accent" : "text-fg/60"} />
             <span className="max-w-full truncate">{t("Settings")}</span>
           </button>
           <div ref={menuRef} className="relative w-full">
             <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen} aria-haspopup="menu" className={cx(railButton(menuOpen), "mx-auto")}>
-              <Menu size={21} className="text-fg/60" />
+              <Menu size={22} className="text-fg/60" />
               <span>{t("More")}</span>
             </button>
             {menuOpen && (
@@ -177,7 +177,7 @@ export function Sidebar() {
 
       {/* the chats, beside the rail while the chat is open */}
       {state.tab === "chat" && (
-        <section className="flex h-full w-[248px] shrink-0 flex-col border-r border-border bg-surface/40" aria-label={t("Chats")}>
+        <section className="flex h-full w-[280px] shrink-0 flex-col border-r border-border bg-surface/40" aria-label={t("Chats")}>
           <div className="titlebar-room" />
           <div className="px-3 pb-2 pt-4">
             <div className="flex items-center justify-between px-1">

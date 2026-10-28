@@ -1,4 +1,4 @@
-import { ArrowUp, ChevronDown, FileText, Loader2, Menu, MessageSquarePlus, Moon, Plus, Square, Table2, Trash2, Wand2, X } from "lucide-react";
+import { ArrowUp, Bot, ChevronDown, FileText, Loader2, Menu, MessageSquarePlus, Moon, Plus, Square, Table2, Trash2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api, fileUrl } from "../api";
 import { botForThread, isChief } from "../bots";
@@ -197,9 +197,8 @@ export function ChatScreen() {
     <div className="relative flex h-full flex-col">
       {/* Dragon's header: the face on its disc, the name tag with what it is doing, the round hamburger
           and menu. A scrim over the list, which scrolls under it; no bar and no line below it. */}
-      <div ref={headerRef} className="pointer-events-none absolute inset-x-0 top-0 z-10">
+      <div ref={headerRef} className="absolute inset-x-0 top-0 z-10">
         <DragonHeader
-          scrim
           profile={bot}
           status={status}
           name={name}
@@ -215,14 +214,15 @@ export function ChatScreen() {
           }
           trailing={<MoreMenu actions={[{ label: t("Coding agents"), onClick: () => setTab("coding") }]} />}
           under={under}
+          className="border-b border-border/60 bg-surface/90 backdrop-blur"
         />
       </div>
       {/* while reading older messages the top edge fades fully into the canvas, under the header */}
       <div aria-hidden className="list-fade-top pointer-events-none absolute inset-x-0 top-0 z-[5] h-20" style={{ opacity: scrolledUp ? 1 : 0 }} />
 
       {/* Timeline */}
-      <div ref={listRef} onScroll={measure} className="relative flex-1 overflow-y-auto px-3 pb-3">
-        <div ref={contentRef} className="space-y-2.5">
+      <div ref={listRef} onScroll={measure} className="relative flex-1 overflow-y-auto px-4 pb-3">
+        <div ref={contentRef} className="space-y-4">
           {/* the room the header takes; the first message starts under it, not behind it */}
           <div aria-hidden style={{ height: headerHeight }} />
           {state.hasMore[activeThread] && events.length > 0 && (
@@ -423,7 +423,7 @@ function UserBubble({ event, onOpenFile }: { event: UserEvent; onOpenFile: (path
         </button>
       ))}
       {event.text && (
-        <div className="bubble-user max-w-full rounded-[20px] bg-bubble-user px-4 py-2.5 text-bubble-user-fg">
+        <div className="bubble-user max-w-[85%] rounded-3xl bg-bubble-user px-4 py-2.5 text-bubble-user-fg sm:max-w-[75%]">
           <div className="md text-[15px] leading-[1.45] whitespace-pre-wrap break-words">{event.text}</div>
         </div>
       )}
@@ -495,14 +495,14 @@ function AssistantBubble({
               <Markdown text={b.text} files={files} onOpenFile={onOpenFile} />
             </div>
           ) : (
-            <div key={i} className="my-1 max-w-[340px] rounded-[20px] bg-bubble-agent px-3.5 py-2.5 wide:max-w-[600px]">
+            <div key={i} className="my-1 max-w-[85%] rounded-3xl bg-bubble-agent px-4 py-2.5 sm:max-w-[75%]">
               <Markdown text={b.text} files={files} onOpenFile={onOpenFile} />
               {streaming && i === blocks.length - 1 && <span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-accent/70 animate-pulse rounded-sm" />}
             </div>
           ),
         )}
         {blocks.length === 0 && streaming && (
-          <div className="my-1 rounded-[20px] bg-bubble-agent px-3.5 py-2.5">
+          <div className="my-1 max-w-[85%] rounded-3xl bg-bubble-agent px-4 py-2.5 sm:max-w-[75%]">
             <span className="inline-block w-1.5 h-4 align-middle bg-accent/70 animate-pulse rounded-sm" />
           </div>
         )}
@@ -532,7 +532,7 @@ function TypingIndicator({ label }: { label?: string }) {
   const t = useT();
   return (
     <div className="flex items-center gap-2" role="status">
-      <div aria-hidden className="rounded-[20px] rounded-bl-md bg-bubble-agent px-3.5 py-2.5 flex items-center gap-1">
+      <div aria-hidden className="rounded-3xl rounded-bl-md bg-bubble-agent px-4 py-2.5 flex items-center gap-1">
         <span className="typing-dot h-2 w-2 rounded-full bg-muted" />
         <span className="typing-dot h-2 w-2 rounded-full bg-muted" />
         <span className="typing-dot h-2 w-2 rounded-full bg-muted" />
@@ -583,22 +583,34 @@ function EmptyChat({ name, onSend }: { name: string; onSend: (text: string) => v
   ];
   // The face is already in the header above; here the agent speaks.
   return (
-    <div className="flex flex-col items-center text-center px-6 pt-10 pb-6 gap-3">
-      <div className="text-[20px] font-semibold">{t("Hi, I'm {name}.", { name })}</div>
-      <p className="text-muted text-[14.5px] leading-snug max-w-sm">
-        {t("I don't just answer; I get things done: research, plans, files, code, email, long-running goals. Everything I do shows up here, and anything hard to undo waits for your approval.")}
-      </p>
-      <div className="mt-2 flex flex-wrap justify-center gap-2">
-        {starters.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onSend(s)}
-            className="rounded-full bg-surface-2 px-3.5 py-1.5 text-[13.5px] hover:bg-border/60"
-          >
-            {s}
-          </button>
-        ))}
+    <div className="mx-auto mt-6 w-full max-w-md">
+      <div className="overflow-hidden rounded-3xl border border-border/60 bg-surface shadow-sm">
+        <div className="relative px-6 py-8 text-center">
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-accent-soft via-accent-soft/30 to-transparent" />
+          <div className="relative flex flex-col items-center gap-3">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-accent shadow-sm ring-1 ring-border/40">
+              <Bot size={28} />
+            </div>
+            <div className="text-[20px] font-semibold">{t("Hi, I'm {name}.", { name })}</div>
+            <p className="text-muted text-[14.5px] leading-snug max-w-sm">
+              {t("I don't just answer; I get things done: research, plans, files, code, email, long-running goals. Everything I do shows up here, and anything hard to undo waits for your approval.")}
+            </p>
+          </div>
+        </div>
+        <div className="border-t border-border/60 bg-surface-2/40 px-5 py-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {starters.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onSend(s)}
+                className="rounded-2xl border border-border/55 bg-surface px-3.5 py-2.5 text-left text-[13px] transition-all duration-150 hover:-translate-y-0.5 hover:border-border hover:shadow-md active:scale-[0.98]"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -782,7 +794,7 @@ export function Composer({
       {pending.length > 0 && (
         <div className="mb-1 flex gap-2.5 overflow-x-auto px-1 pt-2.5 pb-1 pr-3" role="list" aria-label={t("Attachments")}>
           {pending.map((p) => (
-            <div key={p.key} role="listitem" className={cx("relative shrink-0 rounded-2xl border bg-surface-2", p.error ? "border-danger/60" : "border-border/70")}>
+            <div key={p.key} role="listitem" className={cx("relative shrink-0 rounded-2xl border bg-surface-2 shadow-sm", p.error ? "border-danger/60" : "border-border/70")}>
               {p.preview ? (
                 <img src={p.preview} alt={p.file.name} className="h-16 w-16 rounded-2xl object-cover" />
               ) : (
@@ -811,7 +823,7 @@ export function Composer({
           ))}
         </div>
       )}
-      <div className="flex items-end gap-2 rounded-[26px] border border-border bg-surface px-1.5 py-1.5 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.12)] focus-within:border-fg/20">
+      <div className="flex items-end gap-2 rounded-[28px] border border-border/60 bg-surface px-2 py-2 shadow-[0_2px_16px_-6px_rgba(0,0,0,0.12)] focus-within:ring-2 focus-within:ring-accent/30">
         <input
           ref={fileRef}
           type="file"
