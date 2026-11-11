@@ -57,26 +57,13 @@ class Incoming:
         self.run = run
 
 
-# The light web tools step aside when the browser is registered: web work happens in the
-# browser, where the user watches it live, and the browser's own `fetch` covers raw reads.
-LIGHT_WEB_TOOLS = ("web_search", "web_fetch")
-
-
 def model_facing(tools: ToolCollection) -> list[BaseTool]:
-    """What the model may call. With the browser among the tools, ``web_search`` and
-    ``web_fetch`` are not offered at all: a prompt rule is not enough to keep a weak model
-    from reaching for them, and web work belongs where the user can watch it happen."""
-    if "browser" not in {t.name for t in tools}:
-        return list(tools)
-    return [t for t in tools if t.name not in LIGHT_WEB_TOOLS]
+    """What the model may call. Every registered tool is offered; the model chooses."""
+    return list(tools)
 
 
 def call_refused(name: str, tools: ToolCollection) -> str | None:
-    """Why a call does not run, when it does not. The light web tools are not offered
-    beside the browser (see :func:`model_facing`); a name recalled from earlier in the
-    conversation is turned back with the right one instead of quietly running."""
-    if name in LIGHT_WEB_TOOLS and "browser" in {t.name for t in tools}:
-        return f"{name} is not offered while the browser is open. Do this with the `browser` tool."
+    """Why a call does not run, when it does not. The model may call any offered tool."""
     return None
 
 

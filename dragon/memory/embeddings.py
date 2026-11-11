@@ -221,12 +221,14 @@ class MemoryIndex:
             self._vectors = self.store.vectors(self.embedder.model)
         return self._vectors
 
-    async def ensure(self, items: list[MemoryItem]) -> bool:
-        """Every item embedded with the current model. False when that cannot be done now."""
+    async def ensure(self) -> bool:
+        """Every memory (all owners) embedded with the current model. False when that
+        cannot be done now."""
         if not self.embedder.usable:
             return False
         async with self._lock:
             vectors = self._load()
+            items = self.store.all(limit=None)
             wanted = {it.id: content_hash(it.content) for it in items}
             stale = [mid for mid in vectors if mid not in wanted]
             if stale:
@@ -245,12 +247,15 @@ class MemoryIndex:
                 vectors.update(fresh)
             return self.embedder.usable
 
-    async def search(self, query: str, limit: int = 10) -> list[MemoryItem]:
+    async def search(
+        self, query: str, limit: int = 10, owner: str | None = None
+    ) -> list[MemoryItem]:
         """Keyword hits and meaning hits, fused; the keyword ranking alone when the
-        endpoint is not available."""
-        items = self.store.all()
-        by_keyword = self.store.search(query, limit=max(limit, 2 * limit))
-        if not items or not query.strip() or not await self.ensure(items):
+        endpoint is not available. ``owner`` narrows the field first, so the fused list
+        is cut only after other owners are gone."""
+        items = self.store.all(limit=None, owner=owner)
+        by_keyword = self.store.search(query, limit=max(limit, 2 * limit), owner=owner)
+        if not items or not query.strip() or not await self.ensure():
             return by_keyword[:limit]
         query_vec = await self.embedder.embed([query])
         if not query_vec:
@@ -260,11 +265,13 @@ class MemoryIndex:
         by_meaning = standouts(scored, limit=2 * limit)
         return fuse(by_keyword, by_meaning, limit=limit)
 
-    async def closest(self, text: str, limit: int = 5) -> list[tuple[float, MemoryItem]]:
+    async def closest(
+        self, text: str, limit: int = 5, owner: str | None = None
+    ) -> list[tuple[float, MemoryItem]]:
         """Memories closest in meaning to ``text`` with their cosines — for the CLI and
         the connections test, not the agent."""
-        items = self.store.all()
-        if not items or not await self.ensure(items):
+        items = self.store.all(limit=None, owner=owner)
+        if not items or not await self.ensure():
             return []
         vec = await self.embedder.embed([text])
         if not vec:

@@ -1060,7 +1060,7 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
         """The endpoint, its key and the hands, picture and clip slots that used it (back to
         automatic); 409 while the chat model answers through it."""
         try:
-            if not conn.endpoints.remove(endpoint_id):
+            if not await conn.endpoints.remove(endpoint_id):
                 raise HTTPException(404, "no such endpoint")
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
@@ -1763,6 +1763,8 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
             logger.debug("websocket closed: {}", exc)
         finally:
             pump_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pump_task
             svc.bus.unsubscribe(queue)
 
     # ------------------------------------------------------------------ static SPA
@@ -1868,9 +1870,16 @@ async def _handle_ws_message(
     reply = send or ws.send_json  # one writer per socket when the pump shares it
     try:
         if kind == "send":
+            thread_id = str(data.get("thread") or MAIN_THREAD)
+            # the same id check the thread file write does: a path the client controls
+            # must not reach out of the threads dir, nor auto-create a phantom thread
+            svc._thread_file(thread_id, ".json")
+            if thread_id not in svc.threads:
+                await reply({"kind": "error", "error": "no such thread"})
+                return
             files = data.get("files")
             svc.send(
-                str(data.get("thread") or MAIN_THREAD),
+                thread_id,
                 str(data.get("text", ""))[:20_000],
                 files=[str(f) for f in files][:10] if isinstance(files, list) else None,
                 language=str(data.get("language") or "")[:20],

@@ -12,7 +12,7 @@ import pytest
 
 from dragon.bots import running_bot_id
 from dragon.schema import RiskLevel
-from dragon.tools.browser import _ANNOTATE_JS, Browser, BrowserFrame
+from dragon.tools.browser import _ANNOTATE_JS, _NODES_JS, Browser, BrowserFrame, BrowserLink
 from dragon.tools.browser_backends import (
     PROFILES,
     BrowserBackend,
@@ -61,6 +61,8 @@ class FakeBackend(BrowserBackend):
         self.calls.append(("evaluate", arg))
         if js is _ANNOTATE_JS or "data-om-idx" in js and "maxElements" in js:
             return ELEMENTS[: int(arg)]
+        if js is _NODES_JS:
+            return [dict(n) for n in self.PAGE_NODES]
         if "getBoundingClientRect" in js and "scrollIntoView" in js and "index" not in js:
             # the centre of an element
             return (
@@ -74,6 +76,37 @@ class FakeBackend(BrowserBackend):
         if "innerText" in js:
             return ELEMENTS[int(arg)]["text"] if int(arg) < 3 else ""
         return None
+
+    # the vision view's element tree (same three elements, with bounds)
+    PAGE_NODES = [
+        {
+            "class": "a",
+            "text": "Sign in",
+            "cx": 100,
+            "cy": 200,
+            "box": [60, 190, 140, 210],
+            "clickable": True,
+        },
+        {
+            "class": "input",
+            "text": "Search",
+            "cx": 100,
+            "cy": 300,
+            "box": [60, 290, 140, 310],
+            "editable": True,
+        },
+        {
+            "class": "button",
+            "text": "Go",
+            "cx": 300,
+            "cy": 400,
+            "box": [280, 390, 320, 410],
+            "clickable": True,
+        },
+    ]
+
+    async def nodes(self) -> list[dict[str, Any]]:
+        return [dict(n) for n in self.PAGE_NODES]
 
     async def click_at(self, x: float, y: float) -> None:
         self.calls.append(("click_at", (x, y)))
@@ -366,3 +399,134 @@ async def test_fetch_checks_every_redirect_hop(tmp_path: Path, monkeypatch):
     res = await tool.execute(action="fetch", url="https://shop.example/inside")
     assert not res.ok and "redirect to a private or local address" in (res.error or "")
     assert not any(c[1][0].startswith("http://169.254") for c in backend.calls if c[0] == "fetch")
+
+
+# ------------------------------------------------------------------- the vision operator
+async def test_visual_screen_carries_boxed_nodes(tmp_path: Path):
+    backend = FakeBackend()
+    tool, _ = tool_with(backend, tmp_path)
+    shots = tmp_path / "shots"
+    screen = await tool.visual_screen(backend, shots)
+    # the fake backend's JPEG is a tiny header, so no image file is saved; the observation
+    # itself still carries the URL, size and the boxed node list
+    assert screen.mode == "browser" and screen.width == 1280 and screen.route == "about:blank"
+    # the page's elements land as nodes with viewport-pixel bounds for the Sentinel
+    assert len(screen.nodes) == 3
+    signin = next(n for n in screen.nodes if n.get("text") == "Sign in")
+    assert signin["box"] == [60, 190, 140, 210] and signin["clickable"] is True
+    assert signin["cx"] == 100 and signin["cy"] == 200
+
+
+async def test_browser_link_maps_goto_and_click(tmp_path: Path, monkeypatch):
+    backend = FakeBackend()
+    tool, _ = tool_with(backend, tmp_path)
+    link = BrowserLink(tool)
+
+    # goto: normalises the URL, installs the guard, drives the backend, re-checks the final
+    # URL, then looks again
+    monkeypatch.setattr("dragon.tools.browser._is_private_host", lambda host: False)
+    r = await link.act({"action": "goto", "url": "example.com"})
+    assert r["looked"] is True and ("goto", "https://example.com") in backend.calls
+
+    r = await link.act({"action": "click", "x": 100, "y": 200})
+    assert ("click_at", (100.0, 200.0)) in backend.calls
+    assert r["looked"] is True
+
+
+def test_browser_dialect_maps_a_click_and_refuses_open():
+    from dragon.gui.operator import parse_step, to_browser_action
+    from dragon.gui.screen import Screen
+
+    screen = Screen(app="x", width=1280, height=900)
+    s = parse_step(
+        '<tool_call>{"name": "browser_use", "arguments": {"action": "left_click", '
+        '"coordinate": [640, 450]}}</tool_call>',
+        tool="browser_use",
+    )
+    assert s is not None and s.kind == "left_click"
+    out = to_browser_action(s, screen)
+    assert out is not None and out["action"] == "click"
+    # the 999-grid coordinate (0..999) scales to the viewport, then to pixels of the page
+    assert out["x"] == 820.0 and out["y"] == 405.4
+    # `open` is not a browser action: the dialect only offers `goto`
+    s = parse_step(
+        '<tool_call>{"name": "browser_use", "arguments": {"action": "open", "text": "x"}}</tool_call>',
+        tool="browser_use",
+    )
+    assert s is not None
+    with pytest.raises(ValueError, match="not a browser action"):
+        to_browser_action(s, screen)
+
+
+async def test_browser_task_needs_a_vision_model(tmp_path: Path, settings):
+    """The optional vision design: `browser_task` refuses on a text-only model instead of
+    mis-driving the browser; the main agent then keeps the plain DOM `browser` actions."""
+    from dragon.gui.operator import BROWSER, GuiOperator
+    from dragon.llm.mock import MockLLM
+    from dragon.tools.browser import BrowserTask
+
+    backend = FakeBackend()
+    tool, _ = tool_with(backend, tmp_path)
+    link = BrowserLink(tool)
+
+    from dragon.sentinel import AuditLog, Sentinel
+    from dragon.tools.browser import BrowserAct
+    from tests.gui_fakes import AutoApproveUI
+
+    # a text-only model: the ruler is the operator's own `vision_available` gate
+    llm = MockLLM([])
+    llm.vision_available = False
+    ui = AutoApproveUI()
+    operator = GuiOperator(
+        link,  # type: ignore[arg-type]
+        settings.gui,
+        Sentinel(
+            settings.sentinel,
+            audit=AuditLog(settings.data_dir / "a.jsonl", session_id="t"),
+            ui=ui,
+        ),
+        BrowserAct(link=link, gui=settings.gui),
+        ui,
+        make_llm=lambda: llm,
+        dialect=BROWSER,
+    )
+
+    task = BrowserTask(link=link, operator=operator)
+    res = await task.execute(goal="find the price")
+    assert not res.ok
+    assert "does not take images" in (res.error or "")
+
+
+def test_browser_act_assess_flags_sensitive_words(tmp_path: Path):
+    from dragon.config import GUISettings
+    from dragon.tools.browser import BrowserAct
+
+    backend = FakeBackend()
+    tool, _ = tool_with(backend, tmp_path)
+    link = BrowserLink(tool)
+    act = BrowserAct(link=link, gui=GUISettings(sensitive_words=["delete", "confirm payment"]))
+    # put a screen with a boxed "Delete" node at (100, 200) under the cursor
+    from dragon.gui.screen import Screen
+
+    screen = Screen(app="fake", width=1280, height=900)
+    screen.nodes = [{"class": "button", "text": "Delete account", "box": [60, 190, 140, 210]}]
+    act.link.last_screen = screen
+
+    a = act.assess({"action": "click", "x": 100, "y": 200, "label": "Delete"})
+    assert a.risk == RiskLevel.SENSITIVE
+    assert any("delete" in w.lower() for w in a.warnings)
+
+    # a harmless click on the same screen stays moderate
+    a = act.assess({"action": "click", "x": 500, "y": 500, "label": "View"})
+    assert a.risk == RiskLevel.MODERATE and not a.warnings
+
+
+def test_browser_act_type_submit_is_sensitive(tmp_path: Path):
+    from dragon.config import GUISettings
+    from dragon.tools.browser import BrowserAct
+
+    backend = FakeBackend()
+    tool, _ = tool_with(backend, tmp_path)
+    act = BrowserAct(link=BrowserLink(tool), gui=GUISettings())
+    a = act.assess({"action": "type", "text": "hello", "submit": True})
+    assert a.risk == RiskLevel.SENSITIVE and a.egress is True

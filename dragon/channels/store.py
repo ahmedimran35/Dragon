@@ -26,7 +26,7 @@ from typing import Any
 
 from dragon.channels.base import Channel, Field
 from dragon.logger import logger
-from dragon.private import keep_private
+from dragon.private import atomic_write
 from dragon.vault.vault import CredentialVault
 
 GROUP_POLICIES = ("mention", "open")
@@ -56,14 +56,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), "utf-8")
-    try:
-        keep_private(tmp)
-    except OSError:  # pragma: no cover
-        pass
-    tmp.replace(path)
+    atomic_write(path, json.dumps(data, ensure_ascii=False, indent=1), mode=0o600)
 
 
 class _Watched:

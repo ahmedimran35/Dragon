@@ -38,7 +38,7 @@ from dragon.llm.factory import llm_ready
 from dragon.logger import logger
 from dragon.memory.consolidate import TidyReport, tidy
 from dragon.memory.store import MemoryItem, similarity
-from dragon.private import keep_private
+from dragon.private import atomic_write
 from dragon.reflector import LESSONS_PER_PASS, REFLECT_PROMPT, lesson_line, parse_lessons
 from dragon.reflector import json_objects as _json_objects
 from dragon.reminders import Reminder
@@ -491,11 +491,7 @@ class DragonService:
             if tok:
                 return tok
         tok = secrets.token_urlsafe(18)
-        path.write_text(tok, "utf-8")
-        try:
-            keep_private(path)
-        except OSError:  # pragma: no cover
-            pass
+        atomic_write(path, tok, mode=0o600)
         return tok
 
     def _load_profile(self) -> Profile:
@@ -514,8 +510,10 @@ class DragonService:
         return {k: getattr(self.profile, k) for k in BOT_PROFILE_FIELDS}
 
     def _save_profile(self) -> None:
-        (self.data_dir / "profile.json").write_text(
-            json.dumps(self.profile.to_dict(), ensure_ascii=False, indent=1), "utf-8"
+        atomic_write(
+            self.data_dir / "profile.json",
+            json.dumps(self.profile.to_dict(), ensure_ascii=False, indent=1),
+            mode=0o600,
         )
 
     def _apply_profile(self) -> None:
@@ -788,8 +786,10 @@ class DragonService:
                 "bot_id": t.bot_id,
             }
             metas.append(m)
-        (self.threads_dir / "index.json").write_text(
-            json.dumps(metas, ensure_ascii=False, indent=1), "utf-8"
+        atomic_write(
+            self.threads_dir / "index.json",
+            json.dumps(metas, ensure_ascii=False, indent=1),
+            mode=0o600,
         )
 
     def _thread_file(self, thread_id: str, suffix: str) -> Path:
@@ -929,11 +929,13 @@ class DragonService:
             return False
         if thread.worker:
             thread.worker.cancel()
+        thread.timeline.discard()  # no pending flush may recreate the file after unlink
         for p in (thread.timeline.path, thread.agent.session_file):
             if p and Path(p).exists():
                 Path(p).unlink()
         self.app.holds.clear_thread(thread_id)
         self.app.sentinel.end_conversation(thread_id)
+        self.ui.forget_thread(thread_id)
         self._save_index()
         self.bus.publish({"kind": "thread_deleted", "thread": thread_id})
         return True
@@ -1922,6 +1924,8 @@ class DragonService:
                 self._run_event_triggers()
                 await self._poll_mail()
                 self._prune_fired()
+                self.deliveries.prune()
+                self.app.holds.forget_closed()
                 self._announce_wake()
                 await self._run_feed_routine()
                 due = self.next_goal_pass_at or datetime.now(UTC)
@@ -2098,7 +2102,7 @@ class DragonService:
         return self.data_dir / "tasks.json"
 
     def _save_tasks(self, state: dict[str, Any]) -> None:
-        self._tasks_file().write_text(json.dumps(state, ensure_ascii=False), "utf-8")
+        atomic_write(self._tasks_file(), json.dumps(state, ensure_ascii=False), mode=0o600)
 
     def _tasks_state(self) -> dict[str, Any]:
         """The tasks the tab keeps: the model's suggestions and what became of them
@@ -2524,7 +2528,7 @@ class DragonService:
 
     def _save_feed(self, data: dict[str, Any]) -> None:
         data["posts"] = data["posts"][:FEED_KEEP]
-        self._feed_file().write_text(json.dumps(data, ensure_ascii=False), "utf-8")
+        atomic_write(self._feed_file(), json.dumps(data, ensure_ascii=False), mode=0o600)
 
     def set_feed_instructions(
         self, text: str | None = None, *, daily: bool | None = None, time: str | None = None

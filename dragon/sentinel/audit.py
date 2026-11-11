@@ -62,6 +62,9 @@ def channel_of(tool: str) -> str:
 
 
 class AuditLog:
+    # roll over when the trail reaches this size; the old one is kept beside it as `.1`
+    MAX_BYTES = 10 * 1024 * 1024
+
     def __init__(self, path: Path, session_id: str | None = None):
         self.path = Path(path)
         self.session_id = session_id
@@ -82,6 +85,8 @@ class AuditLog:
         line = json.dumps(entry, ensure_ascii=False, default=str)
         with self._lock:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            if self.path.exists() and self.path.stat().st_size >= self.MAX_BYTES:
+                self.path.replace(self.path.with_suffix(self.path.suffix + ".1"))
             with self.path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
         return entry

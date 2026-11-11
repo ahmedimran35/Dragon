@@ -163,6 +163,7 @@ class BotStore:
         try:
             data = json.loads(self.path.read_text("utf-8"))
         except (OSError, json.JSONDecodeError):
+            self._preserve_corrupt()
             return False
         entries = data.get("bots", []) if isinstance(data, dict) else []
         rewrite = False
@@ -182,6 +183,14 @@ class BotStore:
             rewrite = rewrite or item.get("role") != bot["role"]
             self._bots[bot_id] = bot
         return rewrite
+
+    def _preserve_corrupt(self) -> None:
+        """Rename an unreadable file aside instead of letting the next save overwrite it,
+        so staff bots are never silently lost to a truncated write."""
+        try:
+            self.path.rename(self.path.with_name(f"{self.path.name}.corrupt"))
+        except OSError:  # pragma: no cover - best effort; a missing file is fine
+            pass
 
     def _save(self) -> None:
         """Write the file atomically: a temporary file beside it, then ``os.replace``."""

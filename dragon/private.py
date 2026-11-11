@@ -11,7 +11,40 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
+
+
+def atomic_write(path: Path | str, text: str, *, mode: int | None = None) -> None:
+    """Write ``text`` to ``path`` atomically: a temp file beside it, ``fsync``, ``os.replace``.
+
+    A crash mid-write cannot leave a truncated or half-written file — the reader sees
+    either the old content or the new. ``mode`` sets permissions on a newly created file
+    (the existing one keeps its own).
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if mode is not None:
+            os.chmod(temporary, mode)
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def keep_private(path: Path | str) -> None:

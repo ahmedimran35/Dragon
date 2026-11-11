@@ -255,7 +255,7 @@ class Files(BaseTool):
             if action == "search":
                 if not pattern:
                     return ToolResult.fail("`pattern` is required")
-                root = self._resolve(path)
+                root = self._resolve(path, must_exist=True)
                 # matches are named relative to the workspace when the root is in it, and
                 # as absolute paths under an extra root (relative_to raised there before)
                 ws = self.workspace.resolve()

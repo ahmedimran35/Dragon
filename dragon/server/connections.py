@@ -32,7 +32,7 @@ from dragon.config import (
 from dragon.contacts import OWN
 from dragon.llm.chatgpt import DEFAULT_MODEL as CHATGPT_DEFAULT_MODEL
 from dragon.logger import logger
-from dragon.private import keep_private
+from dragon.private import atomic_write
 from dragon.schema import Message
 from dragon.search import WebSearchProvider
 from dragon.server.endpoints import Endpoints
@@ -892,7 +892,7 @@ class Connections:
         if vectors is None:
             return {"ok": False, "error": emb.reason[:400]}
         indexed = 0
-        if app_.memory.index is not None and await app_.memory.index.ensure(app_.memory.all()):
+        if app_.memory.index is not None and await app_.memory.index.ensure():
             indexed = app_.memory.index.status()["indexed"]
         self._publish()
         return {
@@ -1223,8 +1223,7 @@ class Connections:
         folder.mkdir(parents=True, exist_ok=True)
         stem = re.sub(r"[^A-Za-z0-9\u3400-\u9fff_-]+", "-", name).strip("-") or "contacts"
         path = folder / f"{stem}.vcf"
-        path.write_text(text, encoding="utf-8")
-        keep_private(path)
+        atomic_write(path, text, mode=0o600)
         return await self.add_contacts_source({"name": name, "url": str(path)})
 
     def remove_contacts_source(self, name: str) -> bool:
@@ -1523,10 +1522,11 @@ class Connections:
         self.settings.browser.enabled = bool(enabled)
         tools = self.svc.app.tools
         if enabled and "browser" not in tools:
-            tools.add(self.svc.app.browser_tool())
+            tools.add(*self.svc.app.browser_tools())
             self.svc.watch_browser()
         elif not enabled:
             tools.remove("browser")
+            tools.remove("browser_task")
         self._publish()
         return self.view()["browser"]
 

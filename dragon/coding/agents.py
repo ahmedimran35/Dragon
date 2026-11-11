@@ -60,6 +60,9 @@ TAG_RE = re.compile(
     re.S,
 )
 USER_QUERY_RE = re.compile(r"<user_query>(.*?)</user_query>", re.S)
+#: a coding-agent session id is a slug, never a path or glob: anything else would let a
+#: caller read arbitrary transcripts (rglob uses it as a pattern)
+SESSION_ID_RE = re.compile(r"[A-Za-z0-9_.-]+")
 
 
 @dataclass
@@ -899,7 +902,7 @@ def sessions(
 def read_session(agent: str, session_id: str) -> Session | None:
     """One session with its transcript (the last 400 messages)."""
     session_id = session_id.strip()
-    if not session_id or "/" in session_id or ".." in session_id:
+    if not SESSION_ID_RE.fullmatch(session_id):
         return None
     if agent == "cursor":
         root = sessions_root("cursor")

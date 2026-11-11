@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Literal
 
 from dragon.logger import logger
+from dragon.private import atomic_write
 
 GrantScope = Literal["once", "conversation", "session", "24h", "always"]
 SCOPES: tuple[str, ...] = ("once", "conversation", "session", "24h", "always")
@@ -130,7 +131,7 @@ class GrantStore:
             if g.scope in PERSISTED_SCOPES
         ]
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({"version": 2, "grants": keep}, indent=1), "utf-8")
+        atomic_write(self.path, json.dumps({"version": 2, "grants": keep}, indent=1), mode=0o600)
 
     # ------------------------------------------------------------------ queries
     def _exact(self, key: str, now: float, conversation_id: str | None) -> Grant | None:

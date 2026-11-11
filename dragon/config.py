@@ -31,7 +31,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from dragon.logger import logger
-from dragon.private import keep_private
+from dragon.private import atomic_write
 from dragon.schema import RiskLevel
 
 DEFAULT_DATA_DIR = Path.home() / ".dragon"
@@ -843,14 +843,7 @@ def save_app_settings(data_dir: Path, data: dict[str, Any]) -> None:
     truncated file that the next start reads as a first start."""
     data_dir.mkdir(parents=True, exist_ok=True)
     path = data_dir / APP_SETTINGS_FILE
-    tmp = path.with_suffix(".tmp")
-    tmp.touch(mode=0o600, exist_ok=True)
-    tmp.write_text(json.dumps({"version": 1, **data}, ensure_ascii=False, indent=1), "utf-8")
-    try:
-        keep_private(tmp)
-    except OSError:  # pragma: no cover
-        pass
-    tmp.replace(path)
+    atomic_write(path, json.dumps({"version": 1, **data}, ensure_ascii=False, indent=1), mode=0o600)
 
 
 def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
@@ -890,7 +883,11 @@ def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
         for key in ("model", "base_url", "api_key"):
             # "" is meaningful here: back to the default (the model's endpoint and key)
             if key in emb and emb[key] is not None:
-                setattr(m, f"embedding_{key}", str(emb[key]).strip().rstrip("/"))
+                value = str(emb[key]).strip()
+                # only the endpoint takes a trailing-slash trim; a key must stay intact
+                if key == "base_url":
+                    value = value.rstrip("/")
+                setattr(m, f"embedding_{key}", value)
     if search := data.get("search"):
         web = settings.connectors.search
         if search.get("provider") in (
@@ -906,7 +903,10 @@ def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
             web.provider = search["provider"]
         for key in ("api_key", "base_url"):
             if key in search and search[key] is not None:
-                setattr(web, key, str(search[key]).strip().rstrip("/"))
+                value = str(search[key]).strip()
+                if key == "base_url":
+                    value = value.rstrip("/")
+                setattr(web, key, value)
     if email := data.get("email"):
         for key in ("enabled", "imap_host", "imap_port", "smtp_host", "smtp_port", "smtp_starttls"):
             if key in email and email[key] is not None:
@@ -959,7 +959,9 @@ def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
         for key in ("model", "base_url", "api_key"):
             # "" is meaningful: back to the main model's endpoint and key
             if key in gui and gui[key] is not None:
-                value = str(gui[key]).strip().rstrip("/")
+                value = str(gui[key]).strip()
+                if key == "base_url":
+                    value = value.rstrip("/")
                 setattr(settings.gui, key, value if value or key != "base_url" else None)
     for slot in ("image", "video"):
         if media := data.get(slot):
@@ -967,7 +969,9 @@ def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
             for key in ("provider", "model", "base_url", "api_key"):
                 # "" is meaningful: back to the chat model's host
                 if key in media and media[key] is not None:
-                    value = str(media[key]).strip().rstrip("/")
+                    value = str(media[key]).strip()
+                    if key == "base_url":
+                        value = value.rstrip("/")
                     if key == "provider" and value:
                         try:
                             value = check_provider(value)

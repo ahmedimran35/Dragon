@@ -17,7 +17,7 @@ from typing import Any
 
 REFLECT_PROMPT = """You are {name}, the user's personal agent, reviewing what happened lately to learn durable lessons.
 
-Write a lesson only when it will matter again: a preference the user showed, a fact about a site or a service, something that failed and why, a constraint worth carrying into later work. Do not write task summaries, do not write what one message makes obvious, and do not repeat a lesson you already keep.
+Write a lesson only when it will matter again: a preference the user showed, a fact about a site or a service, something that failed and why, a constraint worth carrying into later work. Do not write task summaries, do not write what one message makes obvious, do not write "use tool X to do Y" lessons (which tool does a job is decided by the system, not memory; a memory lesson must never name a tool or a service to fetch from instead of the browser), and do not repeat a lesson you already keep.
 
 Answer with a JSON array only, no prose. Each item: {{"content": "<one specific sentence>", "applies": "<the situation where this matters>", "about": "<two to five keywords this should surface under>"}}. At most {n}. Write in the user's language ({language}).
 

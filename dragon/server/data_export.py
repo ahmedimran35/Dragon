@@ -93,8 +93,16 @@ def _regular_file(path: Path) -> bool:
 def _add_tree(z: zipfile.ZipFile, root: Path, under: str) -> None:
     if root.is_symlink():
         return
+    real_root = root.resolve()
     for path in sorted(root.rglob("*")):
-        if _regular_file(path) and path.stat().st_size <= MAX_FILE_BYTES:
+        # skip directory symlinks (and anything whose real home is outside the tree):
+        # a link placed under threads/ or sessions/ must not pull files from elsewhere
+        if (
+            not path.is_symlink()
+            and path.resolve().is_relative_to(real_root)
+            and _regular_file(path)
+            and path.stat().st_size <= MAX_FILE_BYTES
+        ):
             z.write(path, f"{under}/{path.relative_to(root).as_posix()}")
 
 

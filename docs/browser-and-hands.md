@@ -24,6 +24,13 @@ What it does: opens pages, reads text and structure, clicks, types, fills forms,
 downloads files into the workspace. The model sees the page as text and a screenshot; the
 screen operator's vision model (`[gui]`) describes what is on it when needed.
 
+For a whole job on a page — "find the cheapest flight and tell me the times" — the
+`browser_task` action hands the goal to the same vision operator that drives the hands,
+with the page as its screen. It sees a screenshot, reads the page's elements as hints, and
+clicks, types and scrolls by coordinates until it is done. `browser_task` needs a
+vision-capable model (`[gui]` model, or your main model); without one it refuses and the
+agent keeps using the plain `browser` actions.
+
 The usual rules apply: navigation to a new host after private data was read hits the
 egress allowlist ([security.md](security.md)), and downloads land in the workspace where
 you can see them.

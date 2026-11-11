@@ -40,11 +40,6 @@ from dragon.llm.chatgpt import (
 from dragon.llm.vision import content_parts, has_images, without_images
 from dragon.schema import Function, LLMResponse, Message, ToolCall
 
-#: what a Chat Completions request may carry that the Codex backend rejects or ignores
-_DROPPED = ("temperature", "max_tokens", "max_completion_tokens", "top_p", "n", "stop",
-            "response_format", "presence_penalty", "frequency_penalty", "logprobs", "seed",
-            "stream_options", "user")  # fmt: skip
-
 
 # --------------------------------------------------------------------------- request
 def _obj(value: Any) -> dict[str, Any]:
@@ -177,6 +172,8 @@ def to_codex(body: dict[str, Any]) -> dict[str, Any]:
         "include": ["reasoning.encrypted_content"],
         "reasoning": {"summary": "auto"},
     }
+    if max_tokens := body.get("max_output_tokens"):
+        out["max_output_tokens"] = max_tokens
     if effort := body.get("reasoning_effort"):
         out["reasoning"]["effort"] = str(effort)
     if cache_key := body.get("prompt_cache_key"):
@@ -608,6 +605,8 @@ class CodexLLM(BaseLLM):
         if tools:
             body["tools"] = tools
             body["tool_choice"] = tool_choice
+        if max_tokens is not None:
+            body["max_output_tokens"] = max_tokens
         codex_body = to_codex(body)
         if self.settings.extra_body:
             codex_body.update(self.settings.extra_body)

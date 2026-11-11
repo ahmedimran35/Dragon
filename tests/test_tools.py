@@ -233,6 +233,32 @@ async def test_shell_and_python(tmp_path: Path):
     assert not list(tmp_path.glob("dragon_*.py"))  # temp script cleaned up
 
 
+def test_is_bare_web_fetch():
+    from dragon.tools.shell import is_bare_web_fetch
+
+    assert is_bare_web_fetch("curl -L -s 'https://wttr.in/Dhaka?format=%t+%C'")
+    assert is_bare_web_fetch("wget https://example.com")
+    assert is_bare_web_fetch('curl -s -L "https://api.github.com/repos/x/y"')
+    # python one-liners that import an HTTP library and reach a URL are web reads in disguise
+    assert is_bare_web_fetch("python -c 'import urllib.request; urllib.request.urlopen(\"https://x\")'")
+    assert is_bare_web_fetch("python3 - <<PY\nimport requests\nrequests.get('https://x/y')\nPY")
+    # downloading to a file / piping are not a bare page-read
+    assert not is_bare_web_fetch("curl -o out.json https://example.com")
+    assert not is_bare_web_fetch("curl -O https://example.com/file.tgz")
+    assert not is_bare_web_fetch("git pull origin main")
+    assert not is_bare_web_fetch("pip install requests --index-url https://pypi.org/simple")
+    # a python script without an HTTP import is not a fetch
+    assert not is_bare_web_fetch("python -c 'print(\"hi\")'")
+    assert not is_bare_web_fetch("python -c 'import os; os.system(\"ls\")'")
+
+
+async def test_shell_refuses_bare_web_fetch(tmp_path: Path):
+    r = await Shell(workspace=tmp_path).execute(
+        command="curl -L --max-time 20 -s 'https://wttr.in/Dhaka?format=%t+%C'"
+    )
+    assert not r.ok and "browser" in (r.error or "")
+
+
 async def test_shell_output_is_capped_in_memory(tmp_path: Path, monkeypatch):
     """A command that prints without end is not the runtime's memory: the first bytes are
     kept, the rest drained and counted, and the note says how much went."""

@@ -27,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from dragon.logger import logger
 
 if TYPE_CHECKING:
@@ -488,22 +490,20 @@ def raw_skill_url(url: str) -> str:
 async def fetch_skill_text(url: str) -> str:
     """The text of a SKILL.md at an https link (a raw file, or a GitHub page turned into one).
     ``ValueError`` when it is not one, or when the link does not answer."""
-    import httpx
-
     url = raw_skill_url(url)
     if not url.startswith("https://"):
         raise ValueError("the link must start with https://")
-    from dragon.tools.web import read_capped
+    from dragon.tools.web import fetch_public
 
     try:
-        async with (
-            httpx.AsyncClient(timeout=20, follow_redirects=True) as client,
-            client.stream("GET", url, headers={"User-Agent": "Dragon"}) as r,
-        ):
-            if r.status_code >= 400:
-                raise ValueError(f"HTTP {r.status_code} for {url}")
-            # one byte past the cap is enough to know; the rest is never read
-            content = await read_capped(r, MAX_SKILL_BYTES + 1)
+        # redirects are checked hop-by-hop against the private-host guard, so a link that
+        # 302s into the LAN or the cloud metadata address is refused, not followed
+        resp = await fetch_public(url, timeout=20, headers={"User-Agent": "Dragon"})
+        if resp.status_code >= 400:
+            raise ValueError(f"HTTP {resp.status_code} for {url}")
+        content = resp.content
+    except PermissionError as exc:
+        raise ValueError(str(exc)) from exc
     except httpx.HTTPError as exc:  # a host that does not answer is a message, not a traceback
         raise ValueError(f"could not fetch {url}: {type(exc).__name__}") from exc
     if len(content) > MAX_SKILL_BYTES:

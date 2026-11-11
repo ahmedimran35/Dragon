@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -121,6 +121,17 @@ class DeliveryOutbox:
         self._conn.execute(
             "UPDATE scheduled_deliveries SET finalized=1 WHERE id=? AND status='done'",
             (delivery_id,),
+        )
+        self._conn.commit()
+
+    def prune(self, keep_days: int = 7) -> None:
+        """Drop done rows past their dedup/idempotency window; the uniqueness guard on
+        ``source_key`` only needs to survive long enough to stop a double-fire."""
+        cutoff = (datetime.now(UTC) - timedelta(days=keep_days)).isoformat(timespec="seconds")
+        self._conn.execute(
+            "DELETE FROM scheduled_deliveries WHERE status='done' AND finalized=1 "
+            "AND completed_at < ?",
+            (cutoff,),
         )
         self._conn.commit()
 

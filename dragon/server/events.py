@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from dragon.logger import logger
+from dragon.private import atomic_write
 
 MAIN_THREAD = "main"
 # the notice a stopped run ends on; the web dictionary translates the sentence
@@ -63,12 +64,32 @@ class Timeline:
         try:
             data = json.loads(self.path.read_text("utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("could not load timeline {}: {}", self.path, exc)
+            # Keep the corrupt file aside rather than overwrite it on the next save:
+            # a truncated timeline would otherwise be mistaken for an empty one and lost.
+            logger.warning(
+                "could not load timeline {}: {}; kept as {}", self.path, exc, self.path.name
+            )
+            try:
+                self.path.rename(
+                    self.path.with_name(
+                        f"{self.path.name}.corrupt-{int(datetime.now(UTC).timestamp())}"
+                    )
+                )
+            except OSError:  # pragma: no cover
+                pass
             return
         for ev in data.get("events", []):
             if isinstance(ev, dict) and "id" in ev:
                 self.events.append(ev)
                 self._index[ev["id"]] = ev
+
+    def discard(self) -> None:
+        """Drop any pending or in-flight write, so a deleted thread's file is not recreated."""
+        if self._flush_handle is not None:
+            self._flush_handle.cancel()
+            self._flush_handle = None
+        self._dirty = False
+        self._version += 1  # an in-flight write at an older version drops itself
 
     def _payload(self) -> str:
         return json.dumps(
@@ -81,10 +102,7 @@ class Timeline:
             with self._write_lock:
                 if version < self._version:
                     return
-                self.path.parent.mkdir(parents=True, exist_ok=True)
-                tmp = self.path.with_suffix(".tmp")
-                tmp.write_text(payload, "utf-8")
-                tmp.replace(self.path)
+                atomic_write(self.path, payload)
         except OSError as exc:  # pragma: no cover
             logger.warning("could not save timeline {}: {}", self.path, exc)
 

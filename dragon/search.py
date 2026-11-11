@@ -119,6 +119,27 @@ class WebSearchProvider:
         self.vault = vault
         # Parallel counts its free tier per session: one id for the life of this provider.
         self.session_id = uuid.uuid4().hex
+        # One client for the provider's life, so a turn that searches more than once (a
+        # search, then the fallback, then another query) reuses the connection instead of
+        # paying a fresh DNS + TCP + TLS handshake per call. Created lazily; closed by
+        # `aclose`. Keyed on the `_client` callable so a test that swaps the factory
+        # mid-run gets a fresh client instead of a stale one.
+        self._http: httpx.AsyncClient | None = None
+        self._http_factory: Any = None
+
+    def _http_client(self) -> httpx.AsyncClient:
+        # `_client` is read from this module at call time, so a test that swaps it
+        # mid-run gets a fresh client instead of a stale one.
+        factory = _client
+        if self._http_factory is not factory:
+            self._http = factory()
+            self._http_factory = factory
+        return self._http
+
+    async def aclose(self) -> None:
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
 
     @property
     def name(self) -> str:
@@ -268,16 +289,16 @@ class WebSearchProvider:
             params["country"] = country
         if lang:
             params["search_lang"] = lang
-        async with _client() as client:
-            resp = await client.get(
-                "https://api.search.brave.com/res/v1/web/search",
-                params=params,
-                headers={
-                    "Accept": "application/json",
-                    "Accept-Encoding": "gzip",
-                    "X-Subscription-Token": self.api_key(),
-                },
-            )
+        client = self._http_client()
+        resp = await client.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params=params,
+            headers={
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+                "X-Subscription-Token": self.api_key(),
+            },
+        )
         _raise_for(resp)
         rows = (resp.json().get("web") or {}).get("results") or []
         return [
@@ -290,15 +311,15 @@ class WebSearchProvider:
         ]
 
     async def _tavily(self, query: str, max_results: int) -> list[SearchResult]:
-        async with _client() as client:
-            resp = await client.post(
-                "https://api.tavily.com/search",
-                json={"query": query, "max_results": min(max_results, 20), "search_depth": "basic"},
-                headers={
-                    "Authorization": f"Bearer {self.api_key()}",
-                    "Content-Type": "application/json",
-                },
-            )
+        client = self._http_client()
+        resp = await client.post(
+            "https://api.tavily.com/search",
+            json={"query": query, "max_results": min(max_results, 20), "search_depth": "basic"},
+            headers={
+                "Authorization": f"Bearer {self.api_key()}",
+                "Content-Type": "application/json",
+            },
+        )
         _raise_for(resp)
         rows = resp.json().get("results") or []
         return [
@@ -316,16 +337,16 @@ class WebSearchProvider:
         params: dict[str, Any] = {"q": query, "num": min(max_results, 10)}
         if country:
             params["gl"] = country
-        async with _client() as client:
-            resp = await client.get(
-                "https://api.serply.io/v1/search",
-                params=params,
-                headers={
-                    "Accept": "application/json",
-                    "User-Agent": "Dragon",
-                    "X-Api-Key": self.api_key(),
-                },
-            )
+        client = self._http_client()
+        resp = await client.get(
+            "https://api.serply.io/v1/search",
+            params=params,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "Dragon",
+                "X-Api-Key": self.api_key(),
+            },
+        )
         _raise_for(resp)
         rows = resp.json().get("results") or []
         return [
@@ -350,8 +371,8 @@ class WebSearchProvider:
         if key:
             headers["X-API-Key"] = key
         url = "https://ydc-index.io/v1/search" if key else "https://api.you.com/v1/agents/search"
-        async with _client() as client:
-            resp = await client.get(url, params=params, headers=headers)
+        client = self._http_client()
+        resp = await client.get(url, params=params, headers=headers)
         if not key and resp.status_code in (401, 403, 429):
             raise SearchError(f"the keyless limit is used up (HTTP {resp.status_code})")
         _raise_for(resp)
@@ -391,8 +412,8 @@ class WebSearchProvider:
                 },
             },
         }
-        async with _client() as client:
-            resp = await client.post(PARALLEL_MCP_URL, json=call, headers=headers)
+        client = self._http_client()
+        resp = await client.post(PARALLEL_MCP_URL, json=call, headers=headers)
         if not key and resp.status_code == 429:
             raise SearchError("the free limit is reached for now (HTTP 429)")
         if resp.status_code >= 400:
@@ -439,10 +460,10 @@ class WebSearchProvider:
         if key:
             headers["X-API-Key"] = key
         url = "https://api.keenable.ai/v1/search" + ("" if key else "/public")
-        async with _client() as client:
-            resp = await client.post(
-                url, json={"query": query, "max_results": min(max_results, 20)}, headers=headers
-            )
+        client = self._http_client()
+        resp = await client.post(
+            url, json={"query": query, "max_results": min(max_results, 20)}, headers=headers
+        )
         if not key and resp.status_code == 429:
             raise SearchError("the keyless limit is reached for now (HTTP 429)")
         _raise_for(resp)
@@ -463,10 +484,10 @@ class WebSearchProvider:
         if lang:
             params["language"] = f"{lang}-{country}" if country else lang
         base = self.settings.base_url.rstrip("/")
-        async with _client() as client:
-            resp = await client.get(
-                f"{base}/search", params=params, headers={"Accept": "application/json"}
-            )
+        client = self._http_client()
+        resp = await client.get(
+            f"{base}/search", params=params, headers={"Accept": "application/json"}
+        )
         _raise_for(resp)
         rows = resp.json().get("results") or []
         return [

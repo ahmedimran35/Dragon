@@ -526,6 +526,10 @@ class ComputerTask(BaseTool):
         )
         text = outcome.report()
         images = [outcome.last_image] if outcome.last_image else None
+        # a run that gave up is a failed tool call, so the main agent knows it did not
+        # finish. `ask` (a question for the user) and `stopped` (the user's Stop) are not.
+        if outcome.status in ("abort", "blocked", "failed", "max_steps"):
+            return ToolResult.fail(text)
         return ToolResult(output=text, images=images)
 
 

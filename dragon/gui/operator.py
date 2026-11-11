@@ -27,6 +27,7 @@ import json
 import re
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -408,10 +409,16 @@ def _same_action(a: dict[str, Any], b: dict[str, Any]) -> bool:
     pixel off each time; the check should still see one tap repeated."""
     if a.get("action") != b.get("action"):
         return False
-    for key in ("text", "direction", "key", "app", "seconds"):
+    for key in ("text", "direction", "key", "app", "seconds", "url"):
         if a.get(key) != b.get(key):
             return False
-    for key in ("x", "y", "x2", "y2"):
+    # `keys` is a list (ctrl+c vs ctrl+v are not the same action); compare as-is.
+    ka, kb = a.get("keys"), b.get("keys")
+    if isinstance(ka, list) or isinstance(kb, list):
+        if ka != kb:
+            return False
+    # `dy` is a scroll amount: 300px and 900px differ, but a few pixels off is the same.
+    for key in ("x", "y", "x2", "y2", "dy"):
         va, vb = a.get(key), b.get(key)
         if isinstance(va, (int, float)) and isinstance(vb, (int, float)):
             if abs(float(va) - float(vb)) > _SAME_TAP_PX:
@@ -525,6 +532,67 @@ COMPUTER = Dialect(
         "- Prefer the keyboard where it is exact (a shortcut, typing in a focused field) and "
         "the mouse for what is only on the screen; after `open`, wait for the window before "
         "clicking in it.\n"
+    ),
+)
+
+
+# The web browser speaks the same dialect, with `open` (launch an application) swapped for
+# `goto` (load a URL) and no `open_app`: a page has no app to start, only links to follow.
+BROWSER_USE_TOOL: dict[str, Any] = deepcopy(COMPUTER_USE_TOOL)
+BROWSER_USE_TOOL["function"]["name"] = "browser_use"
+_browser_action_enum = BROWSER_USE_TOOL["function"]["parameters"]["properties"]["action"]
+_browser_action_enum["enum"] = [k.replace("open", "goto") for k in _browser_action_enum["enum"]]
+_browser_action_enum["description"] = (
+    "The action to perform. The available actions are:\n"
+    "* `key`: Press a key or key combination on the keyboard (in `keys`, e.g. ['ctrl', 's'] "
+    "or ['Return']).\n"
+    "* `type`: Type a string of text on the keyboard.\n"
+    "* `goto`: Load a URL (the full address, in `text`) and show the page.\n"
+    "* `mouse_move`: Move the cursor to the point (x, y) on the page.\n"
+    "* `left_click`: Click the left mouse button at (x, y).\n"
+    "* `left_click_drag`: Click and drag the cursor from (x, y) to (x2, y2).\n"
+    "* `right_click`: Click the right mouse button at (x, y).\n"
+    "* `middle_click`: Click the middle mouse button at (x, y).\n"
+    "* `double_click`: Double-click the left mouse button at (x, y).\n"
+    "* `scroll`: Scroll the mouse wheel at (x, y) by `pixels` (negative = up, positive = "
+    "down).\n"
+    "* `wait`: Wait specified seconds for the change to happen.\n"
+    "* `answer`: Output the answer.\n"
+    "* `ask_user`: Ask user for clarification (an answer in words).\n"
+    "* `hand_over`: Hand the page to the user for a step only they can do (a password, a "
+    "code, a CAPTCHA, a payment confirmation); say what to do in `text`. They do it and "
+    "press Done; you then get the page as they left it and carry on.\n"
+    "* `terminate`: Terminate the current task and report its completion status."
+)
+BROWSER_USE_TOOL["function"]["parameters"]["properties"]["text"]["description"] = (
+    "Required only by `action=type`, `action=goto`, `action=ask_user`, `action=hand_over` "
+    "and `action=answer`. For `goto`, the full URL to load."
+)
+
+
+def to_browser_action(step: Step, screen: Screen) -> dict[str, Any] | None:
+    """The ``browser_use`` step as browser ``act`` arguments; None for the ones that end the
+    loop or pause it. Coordinates are viewport CSS pixels (the page's own space, 1:1 with
+    the screenshot), so the shared ``to_action`` math is reused with no screen mapping."""
+    if step.kind == "goto":
+        url = str(step.arguments.get("text") or "").strip()
+        if not url:
+            raise ValueError("`goto` needs a URL in `text`")
+        return {"action": "goto", "url": url, "label": step.action}
+    if step.kind == "open":
+        # a page has no application to start; the dialect offers `goto`, not `open`
+        raise ValueError("`open` is not a browser action; use `goto` with a URL")
+    return to_computer_action(step, screen)
+
+
+BROWSER = Dialect(
+    "browser_use",
+    BROWSER_USE_TOOL,
+    "browser",
+    to_browser_action,
+    rules=(
+        "- Prefer links and the keyboard where they are exact; `goto` types a URL in the "
+        "address bar, everything else is on the page itself.\n"
     ),
 )
 
@@ -906,6 +974,8 @@ class GuiOperator:
 
 
 __all__ = [
+    "BROWSER",
+    "BROWSER_USE_TOOL",
     "COMPUTER",
     "COMPUTER_USE_TOOL",
     "NODES_TEMPLATE",
@@ -918,5 +988,6 @@ __all__ = [
     "Step",
     "parse_step",
     "parse_tagged_text",
+    "to_browser_action",
     "to_computer_action",
 ]

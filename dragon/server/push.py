@@ -26,7 +26,7 @@ from typing import Any
 
 from dragon.background import keep_task
 from dragon.logger import logger
-from dragon.private import keep_private
+from dragon.private import atomic_write
 
 VAPID_FILE = "push-vapid.json"
 SUBSCRIPTIONS_FILE = "push-subscriptions.json"
@@ -46,14 +46,8 @@ def _b64url(raw: bytes) -> str:
 
 
 def _write_private(path: Path, text: str) -> None:
-    """Write ``text`` to a file only its owner can read: created with mode 0600 before any
-    content lands in it, so there is no moment with the secrets world-readable."""
-    path.touch(mode=0o600, exist_ok=True)
-    try:
-        keep_private(path)  # an older file written without the mode
-    except OSError:
-        pass
-    path.write_text(text, encoding="utf-8")
+    """Write ``text`` to a file only its owner can read, atomically and with mode 0600."""
+    atomic_write(path, text, mode=0o600)
 
 
 class PushService:

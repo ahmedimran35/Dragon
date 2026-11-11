@@ -369,10 +369,14 @@ class Endpoints:
         else:
             self.conn.set_media(slot, {"endpoint": endpoint_id})
 
-    def remove(self, endpoint_id: str) -> bool:
+    async def remove(self, endpoint_id: str) -> bool:
         """The endpoint, its key and the slots that pointed at it (back to automatic). The
         chat slot cannot be left empty, so an endpoint it uses is refused until another
         chat model is chosen."""
+        async with self._lock:
+            return self._remove(endpoint_id)
+
+    def _remove(self, endpoint_id: str) -> bool:
         row = self.get(endpoint_id)
         if row is None:
             return False

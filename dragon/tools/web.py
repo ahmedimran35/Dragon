@@ -25,8 +25,9 @@ USER_AGENT = f"Mozilla/5.0 (X11; Linux x86_64) Dragon/{__version__}"
 # a weak one has to be told there that web work is done in the browser, where the user
 # watches it live, and these reads are only the fallback.
 BROWSER_NUDGE = (
-    "Web work is done in the `browser` tool, where the user watches it live; this quick read "
-    "is the fallback for when the browser cannot do the step."
+    "This was a headless text read. For anything a person would read or watch (a news "
+    "article, a weather forecast, a product, search results), open it in the `browser` "
+    "instead: the user watches it live in the app and can take over."
 )
 
 
@@ -70,6 +71,22 @@ MAX_REDIRECTS = 5
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
 
+# One client for the runtime's web reads, so a turn that fetches more than one page (a
+# fetch, its fallback, the next page) reuses the connection instead of paying a fresh
+# DNS + TCP + TLS handshake per call. Keyed on the `AsyncClient` class a test may swap
+# (the skills test patches `httpx.AsyncClient`), so a swap gets a fresh client.
+_public_client: httpx.AsyncClient | None = None
+_public_client_class: type | None = None
+
+
+def _public_http() -> httpx.AsyncClient:
+    global _public_client, _public_client_class
+    if _public_client is None or _public_client_class is not httpx.AsyncClient:
+        _public_client = httpx.AsyncClient(follow_redirects=False, timeout=30.0)
+        _public_client_class = httpx.AsyncClient
+    return _public_client
+
+
 async def fetch_public(
     url: str,
     timeout: float,
@@ -81,43 +98,66 @@ async def fetch_public(
     ``localhost`` is refused instead of followed. The body is read up to
     :data:`MAX_BODY_BYTES` and cut there: a link to a disk image does not fill memory.
 
+    ``transport`` is for tests (and one-off callers): when it is given, a client is built
+    around it; otherwise the persistent client is reused, keeping the connection warm.
+    The per-request ``headers`` override the persistent client's on every hop.
+
     Raises :class:`PermissionError` for a private destination, :class:`httpx.HTTPError`
     for transport problems.
     """
-    async with httpx.AsyncClient(
-        follow_redirects=False, timeout=timeout, headers=headers, transport=transport
-    ) as c:
-        for _ in range(MAX_REDIRECTS + 1):
-            host = host_of(url)
-            if not host:
-                raise PermissionError("invalid url")
-            if await asyncio.to_thread(_is_private_host, host):
-                raise PermissionError(f"refusing to fetch private/internal host '{host}'")
-            resp = await c.send(c.build_request("GET", url), stream=True)
-            try:
-                if resp.is_redirect and "location" in resp.headers:
-                    url = (
-                        str(resp.next_request.url)
-                        if resp.next_request
-                        else resp.headers["location"]
-                    )
-                    continue
-                body = await read_capped(resp, MAX_BODY_BYTES)
-            finally:
-                await resp.aclose()
-            # `read_capped` already undid the transfer encoding, so the response handed
-            # back must not say `content-encoding: gzip`: httpx would decode the body a
-            # second time and fail on every compressed page (#641). The length is the
-            # cut body's, not the wire's.
-            kept = [
-                (k, v)
-                for k, v in resp.headers.multi_items()
-                if k.lower() not in ("content-encoding", "content-length")
-            ]
-            return httpx.Response(
-                resp.status_code, headers=kept, content=body, request=resp.request
-            )
-        raise PermissionError(f"more than {MAX_REDIRECTS} redirects")
+    if transport is not None:
+        async with httpx.AsyncClient(
+            follow_redirects=False, timeout=timeout, transport=transport
+        ) as c:
+            return await _fetch_via(c, url, headers, timeout)
+    return await _fetch_via(_public_http(), url, headers, timeout)
+
+
+async def _fetch_via(
+    c: httpx.AsyncClient,
+    url: str,
+    headers: dict[str, str] | None,
+    timeout: float,
+) -> httpx.Response:
+    for _ in range(MAX_REDIRECTS + 1):
+        host = host_of(url)
+        if not host:
+            raise PermissionError("invalid url")
+        if await asyncio.to_thread(_is_private_host, host):
+            raise PermissionError(f"refusing to fetch private/internal host '{host}'")
+        request = c.build_request("GET", url, headers=headers)
+        # one call's timeout on that call, not baked into the shared client
+        request.extensions["timeout"] = {
+            "connect": timeout,
+            "read": timeout,
+            "write": timeout,
+            "pool": timeout,
+        }
+        resp = await c.send(request, stream=True)
+        try:
+            if resp.is_redirect and "location" in resp.headers:
+                url = (
+                    str(resp.next_request.url)
+                    if resp.next_request
+                    else resp.headers["location"]
+                )
+                continue
+            body = await read_capped(resp, MAX_BODY_BYTES)
+        finally:
+            await resp.aclose()
+        # `read_capped` already undid the transfer encoding, so the response handed
+        # back must not say `content-encoding: gzip`: httpx would decode the body a
+        # second time and fail on every compressed page (#641). The length is the
+        # cut body's, not the wire's.
+        kept = [
+            (k, v)
+            for k, v in resp.headers.multi_items()
+            if k.lower() not in ("content-encoding", "content-length")
+        ]
+        return httpx.Response(
+            resp.status_code, headers=kept, content=body, request=resp.request
+        )
+    raise PermissionError(f"more than {MAX_REDIRECTS} redirects")
 
 
 async def read_capped(resp: httpx.Response, limit: int) -> bytes:
@@ -138,9 +178,10 @@ class WebSearch(BaseTool):
 
     name: str = "web_search"
     description: str = (
-        "Search the web and return titles, URLs and snippets, without opening a page. The fallback "
-        "for when the browser cannot do the step; normally searching is done in the `browser` tool, "
-        "which the user watches live."
+        "Search the web and return titles, URLs and snippets, without opening a page. Use it "
+        "to find what is out there before reading a specific page. When the user would want "
+        "to see the search itself or the results live (a weather forecast, a live score, "
+        "something to watch), open the `browser` instead, and read the page with `extract`."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -190,10 +231,12 @@ class WebSearch(BaseTool):
 class WebFetch(BaseTool):
     name: str = "web_fetch"
     description: str = (
-        "Fetch a public web page or API (HTTP GET only) and return its readable content as "
-        "markdown/text (HTML is converted, JSON is pretty-printed). The fallback for a raw API body "
-        "or a page the `browser` tool cannot open; reading a page is normally done in the `browser` "
-        "tool."
+        "Fetch a raw machine endpoint and return its body as text: a JSON or XML API, a "
+        "webhook, a hosted file (robots.txt, sitemap.xml, a CSV endpoint), anything that is "
+        "data before it is a page. HTML pages are converted to markdown, but a page a person "
+        "would read or watch (news, weather, shopping, search results, anything interactive) "
+        "goes through the `browser` tool, which the user can see and take over, including a "
+        "page that needs clicking, typing or signing in."
     )
     parameters: dict[str, Any] = {
         "type": "object",

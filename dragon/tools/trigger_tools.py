@@ -18,11 +18,9 @@ class Triggers(BaseTool):
         "subject contains every word of `match` arrives (empty match: any mail); kind=`event`, "
         "a calendar event whose title or place contains every word of `match` is `lead_minutes` "
         "(default 30) from starting; kind=`hook`, a program calls the trigger's webhook URL "
-        "(`match` is just a name for it; the URL with its key is in the result and in the app); "
-        "kind=`device`, a device of the account comes online, its name or kind containing every "
-        "word of `match` (empty: any device; this computer does not announce itself). "
+        "(`match` is just a name for it; the URL with its key is in the result and in the app). "
         "`text` is the standing instruction: what to do each time, in the user's words; when it "
-        "fires you get the mail, event, arrival or request as context and you do that work. "
+        "fires you get the mail, event or request as context and you do that work. "
         "Actions: `create` (kind, text, match, lead_minutes), `list`, `cancel` (trigger_id). "
         "Mail triggers need the email connector, event triggers the calendar connector. "
         "Shows in the app under Upcoming."
@@ -35,9 +33,8 @@ class Triggers(BaseTool):
             "match": {
                 "type": "string",
                 "description": (
-                    "Words that must all appear in the sender/subject (mail), title/place "
-                    "(event) or the device's name and kind (device); a name for a hook. Empty "
-                    "matches everything."
+                    "Words that must all appear in the sender/subject (mail) or title/place "
+                    "(event); a name for a hook. Empty matches everything."
                 ),
             },
             "text": {"type": "string", "description": "What to do when it fires."},
@@ -98,7 +95,7 @@ class Triggers(BaseTool):
                 if not text:
                     return ToolResult.fail("`text` is required")
                 if not kind:
-                    return ToolResult.fail("`kind` is required: mail, event, hook or device")
+                    return ToolResult.fail("`kind` is required: mail, event or hook")
                 have = self.available()
                 if kind == "mail" and not have.get("mail", False):
                     return ToolResult.fail(
@@ -131,11 +128,6 @@ class Triggers(BaseTool):
                     out += (
                         "\nChecked every half minute; a matching event that is already inside "
                         "the lead window fires on the next check, so do not do that work here."
-                    )
-                    out += (
-                        "\nIt fires when a device of the account comes online: once per "
-                        "arrival, with the device's name as context. The devices already online "
-                        "when the app started do not fire."
                     )
                 else:
                     out += (

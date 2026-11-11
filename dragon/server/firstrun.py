@@ -23,6 +23,7 @@ from typing import Any, Literal
 
 from dragon.fences import FENCE_NAMING, MAX_NAME, parse_naming_block
 from dragon.logger import logger
+from dragon.private import atomic_write
 
 Phase = Literal["none", "ask_user_name", "ask_agent_name", "named", "done"]
 PHASES: tuple[Phase, ...] = ("none", "ask_user_name", "ask_agent_name", "named", "done")
@@ -408,7 +409,7 @@ class FirstRunStore:
         self.state = state
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(state.to_dict(), ensure_ascii=False, indent=1), "utf-8")
+            atomic_write(self.path, json.dumps(state.to_dict(), ensure_ascii=False, indent=1))
         except OSError as exc:  # pragma: no cover - a read-only data dir
             logger.warning("could not save {}: {}", self.path, exc)
 

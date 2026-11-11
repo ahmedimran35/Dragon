@@ -17,7 +17,7 @@ from dragon.computer.link import ComputerLink
 from dragon.config import CHATGPT_PROVIDER, PROTOCOLS, LLMSettings, Settings
 from dragon.contacts import ContactBook
 from dragon.goals import GoalStore
-from dragon.gui.operator import AUTO_LANGUAGE, COMPUTER, GuiOperator
+from dragon.gui.operator import AUTO_LANGUAGE, BROWSER, COMPUTER, GuiOperator
 from dragon.llm import BaseLLM, catalogue, create_llm
 from dragon.llm.catalogue import Provider
 from dragon.logger import logger, setup_logging
@@ -52,6 +52,7 @@ from dragon.tools import (
     playwright_available,
 )
 from dragon.tools.bots_tool import Bots
+from dragon.tools.browser import BrowserAct, BrowserLink, BrowserTask
 from dragon.tools.computer import ComputerAct, ComputerScreen, ComputerTask
 from dragon.triggers import TriggerStore
 from dragon.ui import UI
@@ -271,8 +272,6 @@ class DragonApp:
             Files(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             Shell(workspace=ws, sandbox=self.sandbox),
             PythonExecute(workspace=ws, sandbox=self.sandbox),
-            WebSearch(provider=WebSearchProvider(s.connectors.search, vault=self.vault)),
-            WebFetch(),
             Goals(store=self.goals),
             Reminders(store=self.reminders),
             Triggers(store=self.triggers, available=self.trigger_kinds),
@@ -280,6 +279,12 @@ class DragonApp:
             # check ("the chief of staff only") is the boundary
             Bots(service=lambda: self.service),
         )
+        # The web tools are added next, with the browser first: the listing model sees
+        # the browser as the default for anything on the web. `web_fetch` and `web_search`
+        # are the lean fallbacks; they come after the browser in the list.
+        if s.browser.enabled:
+            tools.add(*self.browser_tools())
+        tools.add(WebSearch(provider=WebSearchProvider(s.connectors.search, vault=self.vault)), WebFetch())
         if self.memory is not None:
             tools.add(
                 Remember(store=self.memory), Recall(store=self.memory), Forget(store=self.memory)
@@ -297,12 +302,13 @@ class DragonApp:
             tools.add(Skills(library=self.skills))
         if s.hands.enabled and self.computer is not None:
             tools.add(*self.computer_tools())
-        if s.browser.enabled:
-            tools.add(self.browser_tool())
         return tools
 
-    def browser_tool(self) -> Browser:
-        """The browser: Playwright driving a real browser here."""
+    def browser_tools(self) -> list[Browser | BrowserTask]:
+        """The browser (Playwright) plus its vision operator `browser_task`. Both share one
+        :class:`Browser`; the task hands whole goals to the GUI operator loop with the
+        browser as its screen, exactly as `computer_task` does for the hands, and needs a
+        vision-capable model to run."""
         s = self.settings
         tool = Browser(
             headless=s.browser.headless,
@@ -317,7 +323,32 @@ class DragonApp:
                 "browser.enabled=true but playwright is missing: pip install 'dragon[browser]' "
                 "(the browser tool stays off until it is)"
             )
-        return tool
+            return [tool]
+        gui = self.settings.gui
+
+        def language() -> str:
+            lang = self.settings.agent.language
+            return AUTO_LANGUAGE if lang in ("", "auto") else lang
+
+        # one operator and one link per browser tool, resolvers by running bot; the link
+        # picks the running bot's backend and lock on every call, as `Browser.act` does.
+        link = BrowserLink(tool)
+        act = BrowserAct(link=link, gui=gui)
+        operator = GuiOperator(
+            link,
+            gui,
+            self.sentinel,
+            act,
+            self.ui,
+            make_llm=self.make_gui_llm,
+            language=language,
+            traces_dir=self.settings.data_dir / "browser-traces",
+            dialect=BROWSER,
+            holds=self.holds,
+        )
+        self.browser_operator = operator
+        task = BrowserTask(link=link, operator=operator, holds=self.holds)
+        return [tool, task]
 
     def computer_tools(self) -> list[ComputerScreen | ComputerAct | ComputerTask]:
         """The three tools for this computer's screen, sharing one link and one operator

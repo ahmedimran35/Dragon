@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -83,14 +84,25 @@ class CredentialVault:
     def _save(self, data: dict[str, str]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         token = self.fernet.encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8"))
-        tmp = self.path.with_suffix(".tmp")
-        tmp.touch(mode=0o600, exist_ok=True)
-        tmp.write_bytes(token)
+        temporary: Path | None = None
         try:
-            keep_private(tmp)
-        except OSError:  # pragma: no cover
-            pass
-        tmp.replace(self.path)
+            with tempfile.NamedTemporaryFile(
+                "wb",
+                dir=self.path.parent,
+                prefix=f".{self.path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                handle.write(token)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, self.path)
+            temporary = None
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
         self._cache = dict(data)
 
     # ------------------------------------------------------------------ public API

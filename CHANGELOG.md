@@ -5,6 +5,13 @@ All notable changes to Dragon are recorded here. The format follows
 
 ## [Unreleased]
 
+- The web app loads faster: the markdown renderer is fetched only when a reply actually
+  needs it, so the first paint ships about a third less JavaScript (react-markdown and its
+  parser move from the main bundle to a chunk loaded on demand).
+- Browser: `browser_task` hands a whole job on a web page to the vision operator — it sees
+  the page, and clicks, types and scrolls by coordinates with the DOM as hints, the way the
+  computer hands work. Needs a vision-capable model; with a text-only model it refuses and
+  the plain `browser` actions remain. Every step still goes through the Sentinel.
 - Bots: the agent beside you is now one of a roster. Each bot has its own name, face, tone,
   style and standing instructions, its own memories, its own browser sessions, and its own
   chats — its face and name follow the conversation. A sidebar roster shows each bot's face

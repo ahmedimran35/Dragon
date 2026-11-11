@@ -298,13 +298,49 @@ _NO_NETWORK = re.compile(
     re.IGNORECASE,
 )
 
+# a `curl`/`wget` command whose whole job is to fetch a URL and print it (no -o/-O/--output)
+# is a web look-up wearing a shell's clothes: the same one `web_fetch` does. The model is
+# pointed there instead, so a fact question never runs raw network from the shell.
+_LEADS_WITH_FETCH = re.compile(r"^\s*(curl|wget)\b", re.IGNORECASE)
+_HAS_URL = re.compile(r"https?://", re.IGNORECASE)
+# a fetch that writes to a file is real downloading, not a look-up: allowed
+_FETCH_WRITES_OUTPUT = re.compile(r"(^|\s)-[A-Za-z0-9]*[oO](?:\s|=|$)|(^|\s)--output(?:=|\s|$)", re.IGNORECASE)
+# same idea for python one-liners: `python -c '...urllib...'` or a heredoc importing one of
+# the HTTP client libs and reaching a URL is a web look-up in a Python trench-coat
+_PY_HTTP_IMPORT = re.compile(
+    r"\b(import\s+(urllib|http\.client|httpx|requests|aiohttp)|from\s+(urllib|http|httpx|requests|aiohttp)\b)"
+)
+
+
+def _is_python_bare_fetch(command: str) -> bool:
+    """True when ``python -c '...'`` (or a heredoc to python) imports an HTTP client library
+    and reaches a URL; the model should use ``web_fetch`` or ``browser`` instead."""
+    if not re.search(r"\bpython[23]?\b", command):
+        return False
+    if not _HAS_URL.search(command):
+        return False
+    return bool(_PY_HTTP_IMPORT.search(command))
+
+
+def is_bare_web_fetch(command: str) -> bool:
+    """True for a shell one-liner whose whole job is to fetch a URL and print it, e.g.
+    ``curl -L --max-time 20 -s 'https://example.com'`` — the model should use ``web_fetch``
+    (``python -c "import urllib.request..."`` reads the same way)."""
+    if _LEADS_WITH_FETCH.match(command):
+        if _HAS_URL.search(command) and not _FETCH_WRITES_OUTPUT.search(command):
+            return True
+    if _is_python_bare_fetch(command):
+        return True
+    return False
+
 
 class Shell(BaseTool):
     name: str = "shell"
     description: str = (
         "Run a shell command in the workspace directory (bash). Use for git, package managers, "
         "file conversions, quick data processing. Long-running or interactive commands are not "
-        "supported. Output is truncated."
+        "supported. Not for fetching web pages: use `web_search`/`web_fetch`/`browser` for "
+        "anything on the internet (a search, an API, a page). Output is truncated."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -355,6 +391,11 @@ class Shell(BaseTool):
     ) -> ToolResult:
         if not command.strip():
             return ToolResult.fail("empty command")
+        if is_bare_web_fetch(command):
+            return ToolResult.fail(
+                "this shell command just fetches a web page to read it; do web look-ups with "
+                f"`web_fetch` (fast) or `browser` (interactive). Command: {command[:120]}"
+            )
         timeout = number_arg(timeout, 60, 1.0, 600.0)
         self.workspace.mkdir(parents=True, exist_ok=True)
         return await _run(
@@ -447,6 +488,7 @@ __all__ = [
     "PythonExecute",
     "Shell",
     "code_reach",
+    "is_bare_web_fetch",
     "kill_tree",
     "needs_network",
     "programs_of",

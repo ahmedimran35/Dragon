@@ -40,6 +40,13 @@ COMPUTER = Surface(
     say_size=True,
 )
 
+BROWSER = Surface(
+    device="browser",
+    where="on the page",
+    no_shot="the page could not be captured",
+    say_size=True,
+)
+
 
 class _Link(Protocol):
     async def screen(self) -> Screen: ...
@@ -141,6 +148,7 @@ async def hand_over(
 
 
 __all__ = [
+    "BROWSER",
     "COMPUTER",
     "Surface",
     "hand_over",

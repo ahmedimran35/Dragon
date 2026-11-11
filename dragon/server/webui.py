@@ -161,6 +161,28 @@ class WebUI:
         if sid is not None:
             self.bus.publish({"kind": "stream_end", "thread": thread, "id": sid, "discard": True})
 
+    def forget_thread(self, thread: str) -> None:
+        """A thread was deleted: drop everything kept for it in memory (browser frames,
+        artifacts, status) so a long-lived server does not hold dead threads' bytes."""
+        for table in (
+            self._ws_before,
+            self._artifacts,
+            self.status,
+            self._stream_ids,
+            self._stream_buf,
+            self._tool_events,
+            self.last_assistant_text,
+            self.last_assistant_event,
+            self._step_text,
+            self.background,
+            self.model_once,
+            self.browser_frames,
+            self._browser_card,
+            self._hands_card,
+        ):
+            table.pop(thread, None)
+        self.reply_shown.discard(thread)
+
     # ------------------------------------------------------------------ browser view
     def on_browser_frame(self, frame: BrowserFrame) -> None:
         """A new picture of the browser: keep it, and show/update the browser card."""

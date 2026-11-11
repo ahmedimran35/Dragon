@@ -20,7 +20,7 @@ import httpx
 
 from dragon.calendar.ics import Event, Occurrence, day_bounds, expand, parse_ics
 from dragon.logger import logger
-from dragon.private import keep_private
+from dragon.private import atomic_write, keep_private
 
 if TYPE_CHECKING:
     from dragon.config import CalendarSettings
@@ -107,7 +107,7 @@ class CalendarFeeds:
                 if name not in self.states:
                     del existing[name]
             self.cache_file.parent.mkdir(parents=True, exist_ok=True)
-            self.cache_file.write_text(json.dumps(existing), encoding="utf-8")
+            atomic_write(self.cache_file, json.dumps(existing), mode=0o600)
             keep_private(self.cache_file)  # someone's whole calendar; keep it to this user
         except OSError as exc:
             logger.warning("calendar cache not written: {}", exc)

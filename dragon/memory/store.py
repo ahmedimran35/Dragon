@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 # had nothing to compare and approved anything (#270).
 _WORD_RE = re.compile(r"[^\W_\u3400-\u9fff]+")
 _CJK_RE = re.compile(r"[\u3400-\u9fff]")
+# the change history kept for *Recent changes* undo; older entries are pruned on each write
+_LOG_KEEP = 500
 
 
 def _now() -> str:
@@ -230,19 +232,30 @@ class MemoryStore:
         row = self._conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         return self._row(row) if row else None
 
-    def all(self, limit: int = 1000, owner: str | None = None) -> list[MemoryItem]:
+    def all(self, limit: int | None = 1000, owner: str | None = None) -> list[MemoryItem]:
         where, params = _owner_clause(owner)
-        rows = self._conn.execute(
-            f"SELECT * FROM memories{where} ORDER BY created_at DESC LIMIT ?", (*params, limit)
-        ).fetchall()
+        if limit is None:
+            rows = self._conn.execute(
+                f"SELECT * FROM memories{where} ORDER BY created_at DESC", params
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                f"SELECT * FROM memories{where} ORDER BY created_at DESC LIMIT ?", (*params, limit)
+            ).fetchall()
         return [self._row(r) for r in rows]
 
     def _recent(self, limit: int = 1000, owner: str | None = None) -> list[MemoryItem]:
         where, params = _owner_clause(owner)
-        rows = self._conn.execute(
-            f"SELECT * FROM memories{where} ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC, rowid DESC LIMIT ?",
-            (*params, limit),
-        ).fetchall()
+        if limit is None:
+            rows = self._conn.execute(
+                f"SELECT * FROM memories{where} ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC, rowid DESC",
+                params,
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                f"SELECT * FROM memories{where} ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC, rowid DESC LIMIT ?",
+                (*params, limit),
+            ).fetchall()
         return [self._row(r) for r in rows]
 
     def forget(self, memory_id: str) -> bool:
@@ -352,7 +365,7 @@ class MemoryStore:
     ) -> list[MemoryItem]:
         """``search`` with the meaning-based ranking fused in when an index is set up."""
         if self.index is not None:
-            return _visible(await self.index.search(query, limit=limit), owner)
+            return await self.index.search(query, limit=limit, owner=owner)
         return self.search(query, limit=limit, owner=owner)
 
     async def relevant_async(
@@ -363,7 +376,7 @@ class MemoryStore:
         if len(items) <= limit:
             return items
         if self.index is not None:
-            matched = _visible(await self.index.search(context, limit=limit), owner)
+            matched = await self.index.search(context, limit=limit, owner=owner)
             return self._fill(matched, items, limit)
         return self._fill(self.search(context, limit=limit, owner=owner), items, limit)
 
@@ -533,7 +546,17 @@ class MemoryStore:
                 reason,
             ),
         )
+        self._prune_log()
         return change
+
+    def _prune_log(self) -> None:
+        """Keep only the newest changes (the only ones *Recent changes* can still show);
+        the trail is the idempotency surface, not a forever history."""
+        self._conn.execute(
+            "DELETE FROM memory_log WHERE id NOT IN "
+            "(SELECT id FROM memory_log ORDER BY at DESC, rowid DESC LIMIT ?)",
+            (_LOG_KEEP,),
+        )
 
     @staticmethod
     def _row(row: sqlite3.Row) -> MemoryItem:

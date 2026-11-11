@@ -23,7 +23,7 @@ import httpx
 
 from dragon.contacts.vcard import Contact, parse_vcards, render_vcard
 from dragon.logger import logger
-from dragon.private import keep_private
+from dragon.private import atomic_write, keep_private
 
 if TYPE_CHECKING:
     from dragon.config import ContactsSettings
@@ -172,7 +172,7 @@ class ContactBook:
                 if name not in self.states:
                     del existing[name]
             self.cache_file.parent.mkdir(parents=True, exist_ok=True)
-            self.cache_file.write_text(json.dumps(existing), encoding="utf-8")
+            atomic_write(self.cache_file, json.dumps(existing), mode=0o600)
             keep_private(self.cache_file)  # someone's whole address book
         except OSError as exc:
             logger.warning("contacts cache not written: {}", exc)
@@ -270,11 +270,20 @@ class ContactBook:
                 except httpx.HTTPStatusError as exc:
                     state.error = f"HTTP {exc.response.status_code}"
                 except (httpx.HTTPError, ValueError, OSError) as exc:
-                    state.error = str(exc)[:200] or type(exc).__name__
+                    state.error = self._error_text(exc, url)
                 if state.error:
                     logger.warning("contacts source {}: {}", src.name, state.error)
             self._save_cache(texts)
         return self.status()
+
+    @staticmethod
+    def _error_text(exc: Exception, url: str) -> str:
+        """What the status and the log say about a failed source. A private contact link is
+        a secret, and httpx puts the full URL into its errors, so the address never appears."""
+        text = str(exc) or type(exc).__name__
+        if url and url in text:
+            text = text.replace(url, "<the source's address>")
+        return text[:200]
 
     # ------------------------------------------------------------------ looking up
     def get(self, contact_id: str) -> Contact | None:
@@ -394,8 +403,7 @@ class ContactBook:
     def _write_own(self, contacts: list[Contact]) -> None:
         assert self.own_file is not None
         self.own_file.parent.mkdir(parents=True, exist_ok=True)
-        self.own_file.write_text("".join(render_vcard(c) for c in contacts), encoding="utf-8")
-        keep_private(self.own_file)
+        atomic_write(self.own_file, "".join(render_vcard(c) for c in contacts), mode=0o600)
         self._load_own()
 
 
