@@ -100,7 +100,7 @@ export function RiskBadge({ risk }: { risk: RiskLevel }) {
   );
 }
 
-function ArgsList({ args }: { args: Record<string, unknown> }) {
+function ArgsList({ args }: { args?: Record<string, unknown> }) {
   const entries = Object.entries(args ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
   if (!entries.length) return null;
   return (
@@ -115,15 +115,40 @@ function ArgsList({ args }: { args: Record<string, unknown> }) {
   );
 }
 
-// ------------------------------------------------------------------ tool activity chip
-export function ToolChip({ event }: { event: ToolEvent }) {
+// ------------------------------------------------------------------ stream chip
+/**
+ * One shell for everything the model did inside a turn: a tool run, a browser step,
+ * a hands step, a fetch. Collapsed: one line, the tool name and what it did.
+ * Expanded: the args and the result. Pending/failed use the same shell with the
+ * right icon and tone.
+ */
+export function StreamChip({
+  tool,
+  title,
+  output,
+  args,
+  status,
+  elapsedMs,
+  onOpen,
+}: {
+  tool: string;
+  title?: string;
+  output?: string;
+  args?: Record<string, unknown>;
+  status: "running" | "ok" | "error" | "blocked";
+  /** the time the step took, shown next to the icon when finished */
+  elapsedMs?: number;
+  onOpen?: () => void;
+}) {
   const [open, setOpen] = useState(false);
-  const icon =
-    event.status === "running" ? (
+  const toggle = onOpen ?? (() => setOpen((o) => !o));
+  const expandable = !!(output || args);
+  const Icon =
+    status === "running" ? (
       <Loader2 size={14} className="animate-spin text-accent" />
-    ) : event.status === "ok" ? (
+    ) : status === "ok" ? (
       <Check size={14} className="text-emerald-500" />
-    ) : event.status === "blocked" ? (
+    ) : status === "blocked" ? (
       <Ban size={14} className="text-rose-500" />
     ) : (
       <X size={14} className="text-rose-500" />
@@ -132,28 +157,48 @@ export function ToolChip({ event }: { event: ToolEvent }) {
     <div className="rise flex justify-start pr-8">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={event.output ? open : undefined}
+        onClick={expandable ? toggle : undefined}
+        aria-expanded={expandable ? open : undefined}
         className="max-w-full text-left rounded-2xl bg-surface-2/80 border border-border/60 px-3 py-1.5 text-[13px] text-muted hover:text-fg transition"
       >
         <span className="flex items-center gap-2">
-          <span className="text-muted">{toolIcon(event.tool)}</span>
-          <span className="truncate flex-1">{event.title || event.summary || event.tool}</span>
-          {icon}
-          {event.output ? open ? <ChevronDown size={13} /> : <ChevronRight size={13} /> : null}
+          <span className="text-muted">{toolIcon(tool)}</span>
+          <span className="truncate flex-1">{title}</span>
+          {typeof elapsedMs === "number" && status !== "running" && (
+            <span className="shrink-0 text-[11px] text-muted">{formatMs(elapsedMs)}</span>
+          )}
+          {Icon}
+          {expandable ? open ? <ChevronDown size={13} /> : <ChevronRight size={13} /> : null}
         </span>
         {open && (
           <div className="mt-2 text-fg">
-            <ArgsList args={event.args} />
-            {event.output && (
+            <ArgsList args={args} />
+            {output && (
               <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-bg p-2 text-[12px] leading-snug">
-                {event.output}
+                {output}
               </pre>
             )}
           </div>
         )}
       </button>
     </div>
+  );
+}
+
+function formatMs(ms: number): string {
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+// Kept as a thin wrapper so call sites don't change.
+export function ToolChip({ event }: { event: ToolEvent }) {
+  return (
+    <StreamChip
+      tool={event.tool}
+      title={event.title || event.summary || event.tool}
+      args={event.args}
+      output={event.output}
+      status={event.status}
+    />
   );
 }
 

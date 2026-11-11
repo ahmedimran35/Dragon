@@ -9,6 +9,7 @@ import { ChiefBadge } from "../components/ChiefBadge";
 import { MicButton, useDictation } from "../components/Dictation";
 import { ApprovalCard, ArtifactCard, BrowserCard, HandsCard, HoldCard, Notice, QuestionCard, ToolChip } from "../components/Cards";
 import { IntroLines, NamingCard } from "../components/FirstConversation";
+import { EmptyState } from "../components/EmptyState";
 import { Markdown, splitBlocks } from "../components/Markdown";
 import { DragonHeader, DragonRoundButton } from "../components/DragonHeader";
 import { MoreMenu } from "../components/TabHeader";
@@ -214,6 +215,7 @@ export function ChatScreen() {
           }
           trailing={<MoreMenu actions={[{ label: t("Coding agents"), onClick: () => setTab("coding") }]} />}
           under={under}
+          tagline={bot.tagline}
           size={56}
           className="shadow-sm"
         />
@@ -588,36 +590,13 @@ function EmptyChat({ name, onSend }: { name: string; onSend: (text: string) => v
   ];
   // The face is already in the header above; here the agent speaks.
   return (
-    <div className="mx-auto mt-6 w-full max-w-md">
-      <div className="overflow-hidden rounded-3xl border border-border/60 bg-surface shadow-md">
-        <div className="relative px-6 py-8 text-center bg-gradient-to-br from-accent-soft via-accent-soft/30 to-transparent">
-          <div className="relative flex flex-col items-center gap-3">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent-soft text-accent shadow-sm ring-1 ring-border/40">
-              <Bot size={32} />
-            </div>
-            <div className="text-[22px] font-semibold tracking-tight">{t("Hi, I'm {name}.", { name })}</div>
-            <p className="text-muted text-[14.5px] leading-relaxed max-w-sm">
-              {t("I don't just answer; I get things done: research, plans, files, code, email, long-running goals. Everything I do shows up here, and anything hard to undo waits for your approval.")}
-            </p>
-          </div>
-        </div>
-        <div className="border-t border-border/60 bg-surface-2/40 px-5 py-4">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {starters.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onSend(s)}
-                className="flex items-center justify-between gap-2 rounded-2xl border border-border/55 bg-surface px-4 py-3 text-left text-[13.5px] transition-all duration-150 hover:-translate-y-0.5 hover:border-border hover:shadow-md active:scale-[0.98]"
-              >
-                <span>{s}</span>
-                <span className="text-muted">→</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+    <EmptyState
+      tone="soft"
+      icon={<Bot size={32} />}
+      headline={t("Hi, I'm {name}.", { name })}
+      body={t("I don't just answer; I get things done: research, plans, files, code, email, long-running goals. Everything I do shows up here, and anything hard to undo waits for your approval.")}
+      chips={starters.map((s) => ({ label: s, onClick: () => onSend(s) }))}
+    />
   );
 }
 

@@ -1,6 +1,6 @@
+import { useEffect, useState } from "react";
 import type { ComponentPropsWithoutRef } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 import { safeDecodeURIComponent } from "../util";
 
 /**
@@ -103,46 +103,62 @@ export function Markdown({
   files?: readonly string[];
   onOpenFile?: (path: string) => void;
 }) {
-  // which of the thread's files does this text name, if we can open it at all
+  // The file chips work on the text alone; the markdown parser itself is loaded on
+  // demand (the first bubble that needs it) so the app's first paint does not carry
+  // react-markdown + micromark. Before it arrives, or when it fails to load, the raw
+  // text is shown pre-wrapped — never a blank bubble.
   const fileFor = (text: string | undefined): string | null =>
     onOpenFile && text && files.length > 0 ? matchFile(text, files) : null;
   const open = (path: string) => onOpenFile?.(path);
   const source = onOpenFile && files.length > 0 ? markFiles(text, files) : text;
+  const [md, setMd] = useState<{ C: typeof import("react-markdown").default; gfm: typeof import("remark-gfm").default } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    Promise.all([import("react-markdown"), import("remark-gfm")])
+      .then(([r, g]) => alive && setMd({ C: r.default, gfm: g.default }))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const components: Components = {
+    a: ({ href, children, ...props }) => {
+      const path = href && !/^[a-z]+:/i.test(href) ? fileFor(safeDecodeURIComponent(href)) : null;
+      if (path) {
+        return (
+          <button type="button" className="md-file" onClick={() => open(path)}>
+            {children}
+          </button>
+        );
+      }
+      return (
+        <a href={href} {...props} target="_blank" rel="noreferrer noopener">
+          {children}
+        </a>
+      );
+    },
+    code: ({ children, ...props }) => {
+      const path = inlineCode({ children, ...props }) && typeof children === "string" ? fileFor(children) : null;
+      if (path) {
+        return (
+          <button type="button" className="md-file" onClick={() => open(path)} title={path}>
+            {children}
+          </button>
+        );
+      }
+      return <code {...props}>{children}</code>;
+    },
+  };
+  if (!md) {
+    return (
+      <div className="md text-[15px] leading-[1.5] break-words whitespace-pre-wrap">{source}</div>
+    );
+  }
   return (
     <div className="md text-[15px] leading-[1.5] break-words">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ href, children, ...props }) => {
-            const path = href && !/^[a-z]+:/i.test(href) ? fileFor(safeDecodeURIComponent(href)) : null;
-            if (path) {
-              return (
-                <button type="button" className="md-file" onClick={() => open(path)}>
-                  {children}
-                </button>
-              );
-            }
-            return (
-              <a href={href} {...props} target="_blank" rel="noreferrer noopener">
-                {children}
-              </a>
-            );
-          },
-          code: ({ children, ...props }) => {
-            const path = inlineCode({ children, ...props }) && typeof children === "string" ? fileFor(children) : null;
-            if (path) {
-              return (
-                <button type="button" className="md-file" onClick={() => open(path)} title={path}>
-                  {children}
-                </button>
-              );
-            }
-            return <code {...props}>{children}</code>;
-          },
-        }}
-      >
+      <md.C remarkPlugins={[md.gfm]} components={components}>
         {source}
-      </ReactMarkdown>
+      </md.C>
     </div>
   );
 }

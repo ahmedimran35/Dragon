@@ -338,7 +338,20 @@ function reducer(state: AppState, action: Action): AppState {
     case "events": {
       const existing = state.events[action.thread] ?? [];
       const incoming = action.events.map(normalizeEvent);
-      const merged = action.prepend ? [...incoming, ...existing.filter((e) => !incoming.some((n) => n.id === e.id))] : incoming;
+      if (action.prepend) {
+        const merged = [...incoming, ...existing.filter((e) => !incoming.some((n) => n.id === e.id))];
+        return {
+          ...state,
+          events: { ...state.events, [action.thread]: merged },
+          hasMore: { ...state.hasMore, [action.thread]: action.hasMore },
+        };
+      }
+      // a fresh load replaces with the server's page, but a live event that landed during
+      // the fetch is newer than it and must survive; older trimmed events are dropped
+      const newest = incoming.reduce((m, e) => (e.ts > m.ts ? e : m), incoming[0]);
+      const cutoff = newest?.ts ?? "";
+      const live = existing.filter((e) => cutoff && e.ts > cutoff && !incoming.some((n) => n.id === e.id));
+      const merged = [...incoming, ...live];
       return {
         ...state,
         events: { ...state.events, [action.thread]: merged },
@@ -465,6 +478,7 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
     case "thread_deleted": {
       const events = { ...state.events };
       delete events[msg.thread];
+      delete perThread[msg.thread];
       return {
         ...state,
         events,
@@ -475,6 +489,7 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
       };
     }
     case "thread_cleared":
+      delete perThread[msg.thread];
       return {
         ...state,
         events: { ...state.events, [msg.thread]: [] },
