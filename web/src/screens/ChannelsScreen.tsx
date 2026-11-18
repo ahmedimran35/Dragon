@@ -8,7 +8,7 @@ import {
   type LoginSession,
   type PendingPairing,
 } from "../channels-api";
-import { PageBar } from "../components/BackBar";
+import { PageBar } from "../components/PageBar";
 import { inputCls, primaryBtn, secondaryBtn } from "../components/Form";
 import { LoadError } from "../components/LoadError";
 import { DragonCaption, DragonCard, DragonDivider, DragonRow, DragonSectionLabel, DragonSwitchRow } from "../components/DragonList";

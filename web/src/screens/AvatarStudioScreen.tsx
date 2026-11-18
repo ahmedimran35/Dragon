@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, fileUrl } from "../api";
 import { DRAGON, dragonClipUrl, dragonUrl, isDragon, studioClipUrl, studioUrl } from "../avatars";
 import { AVATAR_STYLES } from "../components/AvatarPicker";
-import { PageBar } from "../components/BackBar";
+import { PageBar } from "../components/PageBar";
 import { DragonRoundButton } from "../components/DragonHeader";
 import { primaryBtn, secondaryBtn } from "../components/Form";
 import { useMenuKeys } from "../components/useMenuKeys";

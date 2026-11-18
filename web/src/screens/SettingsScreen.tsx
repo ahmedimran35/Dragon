@@ -32,11 +32,12 @@ import { setShowSteps, useShowSteps } from "../steps";
 import { clearMarks, filterPages, hitLabel, markMatches, queryWords } from "../settings-search";
 import { AVATAR_COLORS } from "../components/AvatarPicker";
 import { IdentityForm, identityBody, identityOf, type Identity } from "../components/IdentityForm";
-import { PageBar } from "../components/BackBar";
+import { PageBar } from "../components/PageBar";
 import { getLocale, LOCALES, setLocaleSetting, useLocaleSetting, useT } from "../i18n";
 import { has, regionOf, unavailableLine, useProviders } from "../providers";
 import { setThemeSetting, useThemeSetting } from "../theme";
 import { disablePush, enablePush, pushState, type PushState } from "../push";
+import { setSoundsEnabled, soundsEnabled } from "../sounds";
 import { useStore } from "../store";
 import type { Proactivity, PushInfo } from "../types";
 import { DragonCaption, DragonCard, DragonDivider, DragonRow } from "../components/DragonList";
@@ -81,6 +82,7 @@ export function SettingsScreen() {
   const themeId = `${ids}-theme`;
   const appLangId = `${ids}-app-language`;
   const replyLangId = `${ids}-reply-language`;
+  const searchCountId = `${ids}-search-count`;
 
   useEffect(() => {
     if (!s) void refreshSettings();
@@ -233,12 +235,18 @@ export function SettingsScreen() {
                   onKeyDown={onSearchKey}
                   placeholder={t("Search settings")}
                   aria-label={t("Search settings")}
+                  aria-describedby={searching ? searchCountId : undefined}
                   className="w-full bg-transparent text-[13px] outline-none placeholder:text-muted"
                 />
               </div>
             </div>
             {searching && (
-              <div className="pb-1">
+              <div className="pb-1" aria-live="polite">
+                <span id={searchCountId} className="sr-only">
+                  {hits.length + pageHits.length > 0
+                    ? t("{n} results", { n: hits.length + pageHits.length })
+                    : t("Nothing matches")}
+                </span>
                 {hits.length > 0 && (
                   <>
                     <div className="px-3 pb-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{t("On this page")}</div>
@@ -783,7 +791,25 @@ function PushSettings({ name }: { name: string }) {
         </div>
       )}
       <div className="text-[12.5px] text-muted">{t("In a phone browser, add the app to the home screen first; the icon then shows a badge and notifications open the right chat.")}</div>
+      <SoundToggle />
     </>
+  );
+}
+
+/** A soft sound when a turn ends or a card arrives, off by default, remembered here. */
+function SoundToggle() {
+  const [on, setOn] = useState(() => soundsEnabled());
+  const t = useT();
+  return (
+    <Toggle
+      label={t("Play a sound when a reply lands or a card waits")}
+      hint={t("Two short synthesised notes, in this browser only. Off by default.")}
+      checked={on}
+      onChange={(v) => {
+        setSoundsEnabled(v);
+        setOn(v);
+      }}
+    />
   );
 }
 

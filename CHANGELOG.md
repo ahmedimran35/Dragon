@@ -5,6 +5,12 @@ All notable changes to Dragon are recorded here. The format follows
 
 ## [Unreleased]
 
+- The Feed tab is replaced by a Skills tab. It keeps your own and built-in skills, and adds
+  a directory of free public SKILL.md recipes from agenticskills.io: search it, add one or
+  all of them, or switch on automatic sync to add new skills every six hours. Imported
+  skills start off until you enable them in My skills, so no third-party instructions reach
+  the model before you have read them. The feed's activity and next-up views stay on the
+  agent page, and its needs-you items stay in Tasks.
 - The web app loads faster: the markdown renderer is fetched only when a reply actually
   needs it, so the first paint ships about a third less JavaScript (react-markdown and its
   parser move from the main bundle to a chunk loaded on demand).

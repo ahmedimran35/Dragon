@@ -17,6 +17,20 @@ instructions) plus any supporting files — templates, scripts, reference materi
 - Disable what you never use (`[skills] disabled = [...]`) — the model sees a shorter
   list and picks better.
 
+## The public directory
+
+The Skills tab can show the public catalog at `https://agenticskills.io/skills`. The directory
+has no data API, so Dragon reads its public index and each skill's public detail page; the
+list is cached for an hour. Adding a skill fetches the upstream `SKILL.md` from the raw link
+on that page through Dragon's own importer, so the same size limit, private-host guard and
+front-matter checks apply. You can add one skill, add them all in a throttled background job,
+or turn on automatic sync: every six hours the catalog is checked and anything new is added.
+
+Skills added this way are **off** until you switch them on in My skills. That keeps third-party
+instructions out of the model's prompt until you have read them. Each skill keeps its own
+licence and upstream source; review both before enabling it. The directory is a third-party
+site, so its pages can change or disappear without notice.
+
 ## Writing a skill
 
 ```bash

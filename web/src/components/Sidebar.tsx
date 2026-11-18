@@ -1,4 +1,4 @@
-import { Bug, Globe, LayoutGrid, ListChecks, Menu, MessageCircle, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, Users, Wrench, X } from "lucide-react";
+import { Bug, Globe, LayoutGrid, ListChecks, Menu, MessageCircle, Search, SlidersHorizontal, Sparkles, SquareCheckBig, TerminalSquare, Users, Wrench, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { defaultBot } from "../bots";
 import { useDeveloperTools } from "../devtools";
@@ -44,7 +44,6 @@ export function Sidebar() {
 
   const pendingApprovals = state.pendingApprovals.length;
   const proposals = state.goals.filter((g) => g.proposal && g.status !== "cancelled").length;
-  const feedUnseen = state.pendingApprovals.filter((a) => a.ts > state.feedSeenAt).length;
 
   const statusLine =
     pendingApprovals > 0
@@ -60,7 +59,7 @@ export function Sidebar() {
 
   const rail: Array<{ id: Tab; label: string; icon: ReactNode; badge?: number }> = [
     { id: "chat", label: "Chat", icon: <MessageCircle size={22} />, badge: pendingApprovals },
-    { id: "feed", label: "Feed", icon: <Newspaper size={22} />, badge: feedUnseen },
+    { id: "skills", label: "Skills", icon: <Sparkles size={22} /> },
     { id: "tasks", label: "Tasks", icon: <ListChecks size={22} />, badge: pendingApprovals + proposals },
     { id: "goals", label: "Goals", icon: <SquareCheckBig size={22} />, badge: proposals },
     { id: "library", label: "Library", icon: <LayoutGrid size={22} /> },

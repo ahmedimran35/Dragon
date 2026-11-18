@@ -1,8 +1,9 @@
 import { Brain, Loader2, Plus, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import { PageBar } from "../components/BackBar";
+import { PageBar } from "../components/PageBar";
 import { LoadError } from "../components/LoadError";
+import { EmptyState } from "../components/EmptyState";
 import { useT } from "../i18n";
 import { useStore } from "../store";
 import type { MemoryChange, MemoryItem } from "../types";
@@ -160,23 +161,21 @@ export function MemoryScreen() {
           </div>
         )}
         {items !== null && items.length === 0 && (
-          <div className="rounded-3xl border border-dashed border-border p-6 text-center">
-            <Brain className="mx-auto text-accent" />
-            <div className="mt-2 font-semibold">{t("Nothing remembered yet")}</div>
-            <p className="mt-1 text-[13.5px] text-muted">
-              {t("{name} saves durable facts you share in chat (preferences, people, routines) and never secrets.", { name })}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                openThread("main");
-                setTab("chat");
-              }}
-              className="mt-3 rounded-full bg-accent px-4 py-2 text-[13.5px] font-semibold text-accent-fg"
-            >
-              {t("Tell {name} something to remember", { name })}
-            </button>
-          </div>
+          <EmptyState
+            tone="soft"
+            icon={<Brain size={26} />}
+            headline={t("Nothing remembered yet")}
+            body={t("{name} saves durable facts you share in chat (preferences, people, routines) and never secrets.", { name })}
+            chips={[
+              {
+                label: t("Tell {name} something to remember", { name }),
+                onClick: () => {
+                  openThread("main");
+                  setTab("chat");
+                },
+              },
+            ]}
+          />
         )}
 
         {lessons.length > 0 && (

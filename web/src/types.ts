@@ -696,6 +696,34 @@ export interface SkillsData {
   skills: SkillInfo[];
 }
 
+/** One entry in the public AgenticSkills directory. Imported copies start disabled. */
+export interface CatalogSkill {
+  slug: string;
+  name: string;
+  description: string;
+  url: string;
+  installed: boolean;
+  skill: string;
+}
+
+export interface CatalogStatus {
+  running: boolean;
+  done: number;
+  total: number;
+  failed: number;
+  errors: string[];
+}
+
+export interface SkillCatalogData {
+  source: string;
+  total: number;
+  items: CatalogSkill[];
+  auto_sync: boolean;
+  last_sync: string;
+  last_error: string;
+  status: CatalogStatus;
+}
+
 // ----------------------------------------------------------------------------- connections
 export interface ProviderPreset {
   label: string;

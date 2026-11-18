@@ -1,4 +1,4 @@
-import { LayoutGrid, ListChecks, Loader2, MessageCircle, Newspaper, SquareCheckBig, WifiOff } from "lucide-react";
+import { LayoutGrid, ListChecks, Loader2, MessageCircle, Sparkles, SquareCheckBig, WifiOff } from "lucide-react";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { setToken } from "./api";
 import { BrandMark } from "./components/BrandMark";
@@ -6,12 +6,12 @@ import { BrowserPanel } from "./components/BrowserPanel";
 import { ChatsDrawer } from "./components/ChatsDrawer";
 import { Sidebar } from "./components/Sidebar";
 import { ChatScreen } from "./screens/ChatScreen";
-import { FeedScreen } from "./screens/FeedScreen";
+import { Launcher } from "./screens/Launcher";
 import { useStore, type Tab } from "./store";
 import { useT } from "./i18n";
 import { cx } from "./util";
 
-// The chat and the feed are what opens first; every other screen arrives as its own chunk
+// The chat and the skills tab are what opens first; every other screen arrives as its own chunk
 // the first time it is shown, so the first paint does not carry the provider form or the
 // coding console.
 const AvatarStudioScreen = lazy(() => import("./screens/AvatarStudioScreen").then((m) => ({ default: m.AvatarStudioScreen })));
@@ -39,7 +39,7 @@ function Loading() {
 const glyph = (active: boolean) => ({ size: 26, strokeWidth: active ? 2 : 1.7, fill: active ? "currentColor" : "none", fillOpacity: active ? 0.18 : 0 });
 const TABS: Array<{ id: Tab; label: string; icon: (active: boolean) => ReactNode }> = [
   { id: "chat", label: "Chat", icon: (a) => <MessageCircle {...glyph(a)} /> },
-  { id: "feed", label: "Feed", icon: (a) => <Newspaper {...glyph(a)} /> },
+  { id: "skills", label: "Skills", icon: (a) => <Sparkles {...glyph(a)} /> },
   { id: "tasks", label: "Tasks", icon: (a) => <ListChecks {...glyph(a)} /> },
   { id: "goals", label: "Goals", icon: (a) => <SquareCheckBig {...glyph(a)} /> },
   { id: "library", label: "Library", icon: (a) => <LayoutGrid {...glyph(a)} /> },
@@ -48,6 +48,7 @@ const TABS: Array<{ id: Tab; label: string; icon: (active: boolean) => ReactNode
 export default function App() {
   const { state, setTab } = useStore();
   const t = useT();
+  const [launcherOpen, setLauncherOpen] = useState(false);
 
   // The document title follows the agent's name — no second "Dragon" when the name
   // already carries it ("Ember Dragon" stays "Ember Dragon", not "Ember Dragon · Dragon").
@@ -57,6 +58,20 @@ export default function App() {
       ? name || "Dragon"
       : `${name} · Dragon`;
   }, [state.profile?.name]);
+
+  // ⌘K (or Ctrl+K — both are listened for, so the muscle memory from either platform
+  // works on either platform's keyboard) opens the quick launcher. Typing in a field
+  // keeps ⌘K working; browsers reserve plain keys, not this chord.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setLauncherOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // `#connections` etc. opens a section straight away (`#ideas` is Tasks' old name).
   useEffect(() => {
@@ -85,7 +100,6 @@ export default function App() {
 
   const pendingApprovals = state.pendingApprovals.length;
   const proposals = state.goals.filter((g) => g.proposal && g.status !== "cancelled").length;
-  const feedUnseen = state.pendingApprovals.filter((a) => a.ts > state.feedSeenAt).length;
 
   // One column at narrow widths; on a wide screen a sidebar takes over from the tab bar and
   // the chats sheet — same screens either side.
@@ -112,7 +126,6 @@ export default function App() {
         <main className={cx("tabbar-room mx-auto min-h-0 w-full flex-1 wide:max-w-[900px]", !state.lite && "wide:pb-0")}>
           <Suspense fallback={<Loading />}>
             {state.tab === "chat" && <ChatScreen />}
-            {state.tab === "feed" && <FeedScreen />}
             {state.tab === "tasks" && <TasksScreen />}
             {state.tab === "goals" && <GoalsScreen />}
             {state.tab === "library" && <LibraryScreen />}
@@ -131,7 +144,7 @@ export default function App() {
           <ul className="pointer-events-auto flex w-full max-w-[420px] items-center gap-0.5 rounded-full bg-surface-2/55 px-3.5 py-2.5 ring-1 ring-border/50 backdrop-blur-3xl">
             {TABS.map((tab) => {
               const active = state.tab === tab.id;
-              const badge = tab.id === "chat" ? pendingApprovals : tab.id === "feed" ? feedUnseen : tab.id === "goals" ? proposals : tab.id === "tasks" ? pendingApprovals + proposals : 0;
+              const badge = tab.id === "chat" ? pendingApprovals : tab.id === "goals" ? proposals : tab.id === "tasks" ? pendingApprovals + proposals : 0;
               return (
                 <li key={tab.id} className="min-w-0 flex-1">
                   <button
@@ -158,6 +171,8 @@ export default function App() {
       </div>
       {/* the chats drawer from the hamburger, over a narrow column */}
       <ChatsDrawer />
+      {/* the quick launcher (⌘K / Ctrl+K): settings, chats, bots, a memory line */}
+      <Launcher open={launcherOpen} onClose={() => setLauncherOpen(false)} />
       {/* the agent's browser, live, on the right of a wide window (a phone taps a frame in the chat instead) */}
       {!state.lite && state.browserOpen && <BrowserPanel />}
       <div className="pointer-events-none hidden w-0" />

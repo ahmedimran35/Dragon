@@ -39,7 +39,7 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "../api";
-import { PageBar } from "../components/BackBar";
+import { PageBar } from "../components/PageBar";
 import { ChatGptSignIn } from "../components/ChatGptSignIn";
 import { Card, inputCls, primaryBtn, secondaryBtn } from "../components/Form";
 import { ModelPicker } from "../components/ModelPicker";

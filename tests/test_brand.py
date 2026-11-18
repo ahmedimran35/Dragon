@@ -84,7 +84,11 @@ def _text_files() -> list[Path]:
     for dirpath, dirnames, filenames in os.walk(ROOT):
         rel_dir = Path(dirpath).relative_to(ROOT)
         dirnames[:] = sorted(
-            d for d in dirnames if d not in SKIP_DIRS and str(rel_dir / d) not in SKIP_PATHS
+            d
+            for d in dirnames
+            if d not in SKIP_DIRS
+            and not d.startswith(".venv")
+            and str(rel_dir / d) not in SKIP_PATHS
         )
         for name in sorted(filenames):
             path = Path(dirpath) / name

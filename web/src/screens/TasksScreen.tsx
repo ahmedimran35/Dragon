@@ -1,6 +1,7 @@
-import { Check, Clock, Flag, Loader2, MessageCircle, RefreshCw, RotateCcw, X } from "lucide-react";
+import { Check, Clock, Flag, Loader2, MessageCircle, RefreshCw, RotateCcw, SquareCheckBig, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { EmptyState } from "../components/EmptyState";
 import { Sheet } from "../components/Sheet";
 import { TabHeader } from "../components/TabHeader";
 import { useT } from "../i18n";
@@ -137,10 +138,12 @@ export function TasksScreen() {
       </TabHeader>
       <div className="flex-1 overflow-y-auto pb-6">
         {empty && (
-          <div className="space-y-1.5 px-5 pt-6 text-[14px] leading-[21px] text-muted">
-            <p>{t("Nothing needs you right now.")}</p>
-            <p>{t("No suggestions yet. Refresh once {name} knows you better.", { name })}</p>
-          </div>
+          <EmptyState
+            icon={<SquareCheckBig size={22} />}
+            headline={t("Nothing needs you right now.")}
+            body={t("No suggestions yet. Refresh once {name} knows you better.", { name })}
+            chips={[{ label: t("Refresh"), onClick: () => void load(true) }]}
+          />
         )}
         {sections.map(({ id, title, tasks }) =>
           tasks.length === 0 ? null : (

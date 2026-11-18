@@ -43,6 +43,8 @@
     POST /api/connections/contacts/import?name= (body: the .vcf text)  DELETE /api/connections/contacts/sources/{name}
     POST /api/connections/contacts/test      GET /api/contacts?q=&limit=   look people up
     GET  /api/skills  GET /api/skills/{name}  PUT /api/skills/{name} {content}  DELETE /api/skills/{name}
+    GET  /api/skills/catalog  POST /api/skills/catalog/import {slug}  POST /api/skills/catalog/import-all
+    PUT  /api/skills/catalog/auto {enabled}  GET /api/skills/catalog/status
     POST /api/skills/{name}/enabled {enabled}  POST /api/skills/import {url}
     POST /api/connections/mcp  DELETE /api/connections/mcp/{name}
     GET  /api/vault  PUT|DELETE /api/vault/{name}   (names only ever come back)
@@ -362,6 +364,14 @@ class SkillEnabledBody(BaseModel):
 
 class SkillImportBody(BaseModel):
     url: str = Field(max_length=2000)
+
+
+class SkillCatalogImportBody(BaseModel):
+    slug: str = Field(max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+
+
+class SkillCatalogAutoBody(BaseModel):
+    enabled: bool
 
 
 class CalendarBody(BaseModel):
@@ -1437,6 +1447,38 @@ def create_app(settings: Settings, service: DragonService | None = None) -> Fast
     @app.get("/api/skills", dependencies=dep)
     async def skills() -> dict[str, Any]:
         return svc.skills_view()
+
+    @app.get("/api/skills/catalog", dependencies=dep)
+    async def skill_catalog(refresh: int = 0) -> dict[str, Any]:
+        """The public AgenticSkills directory, with local import state. Cached for an hour."""
+        try:
+            return await svc.catalog_view(refresh=bool(refresh))
+        except ValueError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.get("/api/skills/catalog/status", dependencies=dep)
+    async def skill_catalog_status() -> dict[str, Any]:
+        return svc.catalog_status()
+
+    @app.post("/api/skills/catalog/import", dependencies=dep)
+    async def skill_catalog_import(body: SkillCatalogImportBody) -> dict[str, Any]:
+        try:
+            return await svc.catalog_import(body.slug)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 — a network error, reported as such
+            raise HTTPException(502, f"could not import the skill: {exc}") from exc
+
+    @app.post("/api/skills/catalog/import-all", dependencies=dep)
+    async def skill_catalog_import_all() -> dict[str, Any]:
+        try:
+            return await svc.catalog_import_all()
+        except ValueError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.put("/api/skills/catalog/auto", dependencies=dep)
+    async def skill_catalog_auto(body: SkillCatalogAutoBody) -> dict[str, Any]:
+        return svc.set_catalog_auto(body.enabled)
 
     @app.get("/api/skills/{name}", dependencies=dep)
     async def skill(name: str) -> dict[str, Any]:

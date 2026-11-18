@@ -1,7 +1,7 @@
 import { ArrowUp, Bot, ChevronRight, FolderOpen, Loader2, Plus, RefreshCw, Square, Wrench } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
-import { PageBar } from "../components/BackBar";
+import { PageBar } from "../components/PageBar";
 import { DragonRoundButton } from "../components/DragonHeader";
 import { inputCls, primaryBtn, secondaryBtn } from "../components/Form";
 import { Markdown } from "../components/Markdown";

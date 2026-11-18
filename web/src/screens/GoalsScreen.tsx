@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
+import { EmptyState } from "../components/EmptyState";
 import { DragonRoundButton } from "../components/DragonHeader";
 import { Sheet } from "../components/Sheet";
 import { TabHeader } from "../components/TabHeader";
@@ -120,7 +121,12 @@ export function GoalsScreen() {
 
         <SectionHeader label={t("Tracking")} dot onAdd={() => createRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
         {tracked.length === 0 ? (
-          <p className="px-5 pb-3 text-[13px] text-muted">{t("Nothing tracked yet")}</p>
+          <EmptyState
+            icon={<SquareCheck size={22} />}
+            headline={t("Nothing tracked yet")}
+            body={t("A goal is something that takes more than one reply: a plan with steps, check-ins, and a record of what worked.")}
+            chips={[{ label: t("Add a goal"), onClick: () => createRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) }]}
+          />
         ) : (
           tracked.map((g) => <GoalRow key={g.id} goal={g} onOpen={() => setSelected(g.id)} onToggle={() => void toggleDone(g)} />)
         )}

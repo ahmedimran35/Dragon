@@ -1,4 +1,4 @@
-import { ArrowUp, Bot, ChevronDown, FileText, Loader2, Menu, MessageSquarePlus, Moon, Plus, Square, Table2, Trash2, Wand2, X } from "lucide-react";
+import { ArrowUp, Bot, ChevronDown, FileText, Loader2, Menu, MessageSquarePlus, Moon, PlugZap, Plus, Square, Table2, Trash2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api, fileUrl } from "../api";
 import { botForThread, isChief } from "../bots";
@@ -6,6 +6,7 @@ import { Avatar } from "../components/Avatar";
 import { AvatarOptionsCard } from "../components/AvatarOptionsCard";
 import { BrowserViewer } from "../components/BrowserViewer";
 import { ChiefBadge } from "../components/ChiefBadge";
+import { ComposerToolbar } from "../components/ComposerToolbar";
 import { MicButton, useDictation } from "../components/Dictation";
 import { ApprovalCard, ArtifactCard, BrowserCard, HandsCard, HoldCard, Notice, QuestionCard, ToolChip } from "../components/Cards";
 import { IntroLines, NamingCard } from "../components/FirstConversation";
@@ -242,10 +243,22 @@ export function ChatScreen() {
           {/* The first conversation's opening, where the history begins: the app speaks first */}
           {bound && eventsLoaded && !state.hasMore[activeThread] && intro && <IntroLines lines={intro.lines} />}
           {eventsLoaded && events.length === 0 && !stream && !bound && (
-            <EmptyChat
-              name={name}
-              onSend={(text) => send(activeThread, text).catch((e: Error) => toast(e.message || t("Could not send")))}
-            />
+            !state.settings || state.settings.llm_ready ? (
+              <EmptyChat
+                name={name}
+                onSend={(text) => send(activeThread, text).catch((e: Error) => toast(e.message || t("Could not send")))}
+              />
+            ) : (
+              /* No model yet: the welcome says so and takes the person to Connections,
+                 instead of starters the agent could not answer anyway. */
+              <EmptyState
+                tone="soft"
+                icon={<PlugZap size={28} />}
+                headline={t("Connect a model to begin.")}
+                body={t("{name} needs a model to think with. Yours stays on this machine; the key goes in Connections.", { name })}
+                chips={[{ label: t("Open Connections"), onClick: () => setTab("connections") }]}
+              />
+            )
           )}
           {shown.map((ev, i) => (
             <EventView
@@ -756,7 +769,7 @@ export function Composer({
   };
 
   return (
-    <form onSubmit={submit} className="shrink-0 bg-bg px-3 pt-2 pb-2">
+    <form onSubmit={submit} className="shrink-0 bg-bg px-3 pt-2 pb-2 safe-bottom">
       {busy && !waiting && (
         <div className="px-2 pb-1 text-[12px] text-muted">{t("{name} is working; anything you send now is picked up right away.", { name })}</div>
       )}
@@ -776,9 +789,9 @@ export function Composer({
         </ul>
       )}
       {pending.length > 0 && (
-        <div className="mb-1 flex gap-2.5 overflow-x-auto px-1 pt-2.5 pb-1 pr-3" role="list" aria-label={t("Attachments")}>
+        <div className="mb-1 flex gap-2.5 overflow-x-auto snap-x px-1 pt-2.5 pb-1 pr-3" role="list" aria-label={t("Attachments")}>
           {pending.map((p) => (
-            <div key={p.key} role="listitem" className={cx("relative shrink-0 rounded-2xl border bg-surface-2 shadow-sm", p.error ? "border-danger/60" : "border-border/60")}>
+            <div key={p.key} role="listitem" className={cx("relative shrink-0 snap-start rounded-2xl border bg-surface-2 shadow-sm", p.error ? "border-danger/60" : "border-border/60")}>
               {p.preview ? (
                 <img src={p.preview} alt={p.file.name} className="h-16 w-16 rounded-2xl object-cover" />
               ) : (
@@ -819,6 +832,7 @@ export function Composer({
             e.target.value = "";
           }}
         />
+        <ComposerToolbar />
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -861,7 +875,7 @@ export function Composer({
             onClick={stop}
             disabled={stopping}
             aria-label={t("Stop")}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg shadow-sm transition hover:scale-105 active:scale-95 disabled:opacity-60"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg shadow-sm transition hover:scale-105 active:scale-95 disabled:opacity-60 wide:h-11 wide:w-11"
           >
             <Square size={15} fill="currentColor" strokeWidth={0} />
           </button>
@@ -872,7 +886,8 @@ export function Composer({
             aria-label={t("Send")}
             className={cx(
               // the ink disc: black with a white arrow in the light theme, inverted in the dark
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition hover:scale-105 active:scale-95",
+              // 56px of thumb reach on a phone, 44px where there is a pointer
+              "flex h-14 w-14 shrink-0 items-center justify-center rounded-full transition hover:scale-105 active:scale-95 wide:h-11 wide:w-11",
               text.trim() || attached.length > 0 ? "bg-accent text-accent-fg shadow-sm" : "bg-surface-2 text-muted",
               "disabled:opacity-60",
             )}

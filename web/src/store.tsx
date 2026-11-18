@@ -12,6 +12,7 @@ import { api, AuthError, connectWs, getToken } from "./api";
 import { emptyWatch, trackBrowser, type BrowserWatch } from "./browser";
 import { getLocale, t } from "./i18n";
 import { registerWorker, setAppBadge } from "./push";
+import { agentDone, approvalsWaiting } from "./sounds";
 import { useTheme } from "./theme";
 import { readStorage, writeStorage } from "./util";
 import type {
@@ -35,8 +36,8 @@ import type {
   WsMessage,
 } from "./types";
 
-/** Tab bar: chat · feed · tasks · goals · library. Memory, connections and settings live behind the avatar. */
-export type Tab = "chat" | "feed" | "tasks" | "goals" | "library" | "memory" | "connections" | "channels" | "skills" | "you" | "coding" | "avatar" | "bots";
+/** Tab bar: chat · skills · tasks · goals · library. Memory, connections and settings live behind the avatar. */
+export type Tab = "chat" | "skills" | "tasks" | "goals" | "library" | "memory" | "connections" | "channels" | "you" | "coding" | "avatar" | "bots";
 /**
  * The page this app is framed in (the showcase's frame), when it can be named: the
  * ancestor's origin where the browser exposes it, else the referrer's. A message to the parent
@@ -61,7 +62,7 @@ function tellParent(message: { type: string; [k: string]: unknown }): void {
   if (origin) window.parent.postMessage(message, origin);
 }
 
-const TAB_NAMES: Tab[] = ["chat", "feed", "tasks", "goals", "library", "memory", "connections", "channels", "skills", "you", "coding", "avatar", "bots"];
+const TAB_NAMES: Tab[] = ["chat", "skills", "tasks", "goals", "library", "memory", "connections", "channels", "you", "coding", "avatar", "bots"];
 
 /** A coding run being followed live: the run itself and the steps that arrived so far. */
 export interface CodingLive {
@@ -422,6 +423,8 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
       // is the way in)
       const browsing = ev.type === "browser" ? trackBrowser(state.browser, ev) : state.browser;
       const open = ev.type === "browser" && msg.kind === "event" && ev.status === "live" ? true : state.browserOpen;
+      const pendingApprovals = upsertApproval(state.pendingApprovals, ev);
+      if (ev.type === "approval" && state.pendingApprovals.length === 0 && pendingApprovals.length > 0) approvalsWaiting();
       return {
         ...state,
         streams,
@@ -430,7 +433,7 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
         holds: ev.type === "hold" ? upsertHold(state.holds, ev) : state.holds,
         browser: browsing,
         browserOpen: open,
-        pendingApprovals: upsertApproval(state.pendingApprovals, ev),
+        pendingApprovals,
         feedVersion: isFeedWorthy(ev) ? state.feedVersion + 1 : state.feedVersion,
         mishapAt: mishap ? Date.now() : state.mishapAt,
       };
@@ -471,6 +474,7 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
       if (s?.ended && st.state !== "working") streams[st.thread] = undefined;
       const overall = pickOverall(state.status, st);
       const finished = state.status.state === "working" && overall.state === "idle";
+      if (finished && state.pendingApprovals.length === 0) agentDone();
       return { ...state, status: overall, streams, finishedAt: finished ? Date.now() : state.finishedAt };
     }
     case "thread":
@@ -694,7 +698,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // The service worker (push + app badge) and where a notification tap should land.
   useEffect(() => {
     void registerWorker();
-    // `?thread=<id>` opens a chat, `?tab=goals` (feed, tasks, library, connections) a tab —
+    // `?thread=<id>` opens a chat, `?tab=goals` (skills, tasks, library, connections) a tab —
     // `?tab=ideas` is the Tasks tab's old name, kept so old links still land somewhere.
     // used by notification taps and by links into the app.
     // `?draft=<text>&attach=<json>` puts text and already-uploaded files into the composer

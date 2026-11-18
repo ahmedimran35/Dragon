@@ -26,6 +26,8 @@ import type {
   Reminder,
   ReminderKind,
   SettingsView,
+  CatalogStatus,
+  SkillCatalogData,
   SkillDetail,
   SkillInfo,
   SkillsData,
@@ -397,6 +399,14 @@ export const api = {
   setSkillEnabled: (name: string, enabled: boolean) =>
     request<SkillInfo>(`/api/skills/${encodeURIComponent(name)}/enabled`, json({ enabled })),
   importSkill: (url: string) => request<SkillDetail>("/api/skills/import", json({ url })),
+  // the public AgenticSkills directory
+  skillCatalog: (refresh = false) => request<SkillCatalogData>(`/api/skills/catalog${refresh ? "?refresh=1" : ""}`),
+  skillCatalogStatus: () => request<CatalogStatus>("/api/skills/catalog/status"),
+  importCatalogSkill: (slug: string) => request<{ skill: SkillDetail; license: string; github_url: string }>(
+    "/api/skills/catalog/import", json({ slug })
+  ),
+  importAllCatalogSkills: () => request<CatalogStatus>("/api/skills/catalog/import-all", { method: "POST" }),
+  setCatalogAuto: (enabled: boolean) => request<SkillCatalogData>("/api/skills/catalog/auto", json({ enabled })),
   setGui: (body: Record<string, unknown>) => request<ConnectionsData["gui"]>("/api/connections/gui", { method: "PUT", body: JSON.stringify(body) }),
   testGui: () => request<TestResult & { model?: string }>("/api/connections/gui/test", { method: "POST" }),
   /** where pictures (`image`) or clips (`video`) come from: the slot as set and what it resolves to (0.1.41) */

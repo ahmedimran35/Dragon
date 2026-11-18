@@ -89,6 +89,27 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
+/**
+ * A failed tool call's reason, in the words the person sees: the first line that says
+ * something (the exception's message), stack traces and tracebacks dropped, cut to a line
+ * that fits a chip. `fallback` stands in when nothing human is left.
+ */
+export function formatReason(err: string | null | undefined, fallback: string): string {
+  if (!err || !err.trim()) return fallback;
+  const lines = err
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    // tracebacks, "File "..." line N" frames and "raise …" plumbing never read as a reason
+    .filter((l) => !/^(traceback|during handling|the above exception)/i.test(l))
+    .filter((l) => !/^file "/i.test(l))
+    .filter((l) => !/^raise\b/i.test(l))
+    .filter((l) => !/^[a-z_0-9.]+\([^)]*\):?$/.test(l));
+  const reason = (lines[0] ?? "").replace(/\s+/g, " ").trim();
+  if (!reason) return fallback;
+  return reason.length > 200 ? `${reason.slice(0, 199)}…` : reason;
+}
+
 /** `decodeURIComponent` that gives the text back unchanged when it is not valid percent-encoding (a stray "%" in a link a model wrote). */
 export function safeDecodeURIComponent(text: string): string {
   try {

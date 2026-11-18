@@ -40,7 +40,7 @@ import type {
   RiskLevel,
   ToolEvent,
 } from "../types";
-import { cx, fileKind, timeShort } from "../util";
+import { cx, fileKind, formatReason, timeShort } from "../util";
 
 // ------------------------------------------------------------------ helpers
 export function toolIcon(tool: string, size = 15): ReactNode {
@@ -120,7 +120,9 @@ function ArgsList({ args }: { args?: Record<string, unknown> }) {
  * One shell for everything the model did inside a turn: a tool run, a browser step,
  * a hands step, a fetch. Collapsed: one line, the tool name and what it did.
  * Expanded: the args and the result. Pending/failed use the same shell with the
- * right icon and tone.
+ * right icon and tone. A failed call shows its reason (the readable line of the
+ * error, not the stack) right on the chip, with a Retry that puts the request back
+ * in the composer.
  */
 export function StreamChip({
   tool,
@@ -141,7 +143,10 @@ export function StreamChip({
   onOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const { draft } = useStore();
+  const t = useT();
   const toggle = onOpen ?? (() => setOpen((o) => !o));
+  const failed = status === "error";
   const expandable = !!(output || args);
   const Icon =
     status === "running" ? (
@@ -153,23 +158,46 @@ export function StreamChip({
     ) : (
       <X size={14} className="text-rose-500" />
     );
+  const retry = () => {
+    draft(t("The step “{title}” just failed. Please try it again.", { title: title || tool }));
+  };
   return (
     <div className="rise flex justify-start pr-8">
-      <button
-        type="button"
-        onClick={expandable ? toggle : undefined}
-        aria-expanded={expandable ? open : undefined}
-        className="max-w-full text-left rounded-2xl bg-surface-2/80 border border-border/60 px-3 py-1.5 text-[13px] text-muted hover:text-fg transition"
+      <div
+        className={cx(
+          "max-w-full rounded-2xl border px-3 py-1.5 text-[13px] transition",
+          failed ? "border-rose-500/30 bg-rose-500/8 text-fg" : "border-border/60 bg-surface-2/80 text-muted hover:text-fg",
+        )}
       >
-        <span className="flex items-center gap-2">
-          <span className="text-muted">{toolIcon(tool)}</span>
-          <span className="truncate flex-1">{title}</span>
-          {typeof elapsedMs === "number" && status !== "running" && (
-            <span className="shrink-0 text-[11px] text-muted">{formatMs(elapsedMs)}</span>
-          )}
-          {Icon}
-          {expandable ? open ? <ChevronDown size={13} /> : <ChevronRight size={13} /> : null}
-        </span>
+        <button
+          type="button"
+          onClick={expandable ? toggle : undefined}
+          aria-expanded={expandable ? open : undefined}
+          aria-label={expandable ? t("{tool}: {title}. Tap to expand.", { tool, title: title ?? "" }) : undefined}
+          className="w-full text-left"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-muted">{toolIcon(tool)}</span>
+            <span className="truncate flex-1">{title}</span>
+            {typeof elapsedMs === "number" && status !== "running" && (
+              <span className="shrink-0 text-[11px] text-muted">{formatMs(elapsedMs)}</span>
+            )}
+            {Icon}
+            {expandable ? open ? <ChevronDown size={13} /> : <ChevronRight size={13} /> : null}
+          </span>
+        </button>
+        {failed && (
+          <div className="mt-1 flex items-start gap-1.5 border-t border-rose-500/20 pt-1.5 text-[12.5px] text-rose-700 dark:text-rose-300">
+            <span className="min-w-0 flex-1 break-words leading-snug">{formatReason(output, t("It did not go through."))}</span>
+            <button
+              type="button"
+              onClick={retry}
+              className="shrink-0 rounded-full border border-rose-500/40 px-2.5 py-0.5 text-[12px] font-medium text-rose-700 transition hover:bg-rose-500/10 active:scale-95 dark:text-rose-300"
+            >
+              {t("Retry")}
+            </button>
+          </div>
+        )}
         {open && (
           <div className="mt-2 text-fg">
             <ArgsList args={args} />
@@ -180,7 +208,7 @@ export function StreamChip({
             )}
           </div>
         )}
-      </button>
+      </div>
     </div>
   );
 }
@@ -344,6 +372,7 @@ export function ApprovalCard({
               type="button"
               onClick={() => decide(true, "once")}
               disabled={deciding}
+              aria-label={t("Allow once: {what}", { what: event.summary })}
               className="h-[46px] w-full rounded-full bg-accent text-[15px] font-semibold text-accent-fg transition active:scale-[0.98] disabled:opacity-60"
             >
               {t("Allow once")}
@@ -357,6 +386,7 @@ export function ApprovalCard({
                   type="button"
                   onClick={() => decide(true, scope)}
                   disabled={deciding}
+                  aria-label={t("Allow: {what}", { what: scopeLabel(scope, event.tool, event.target, event.args) })}
                   className="h-11 w-full truncate rounded-full bg-surface-2 px-4 text-[15px] font-medium transition active:scale-[0.98] disabled:opacity-60"
                 >
                   {scopeLabel(scope, event.tool, event.target, event.args)}
@@ -366,6 +396,7 @@ export function ApprovalCard({
               type="button"
               onClick={() => decide(false, "once")}
               disabled={deciding}
+              aria-label={t("Deny: {what}", { what: event.summary })}
               className="h-11 w-full rounded-full bg-surface-2 text-[15px] font-medium transition active:scale-[0.98] disabled:opacity-60"
             >
               {t("Deny")}

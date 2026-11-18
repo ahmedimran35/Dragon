@@ -390,6 +390,7 @@ class SkillLibrary:
         license: str = "",
         allowed_tools: list[str] | None = None,
         metadata: dict[str, str] | None = None,
+        reload: bool = True,
     ) -> Skill:
         """Write (or rewrite) one of your skills. A built-in of the same name is replaced
         by it from then on; its folder is left alone."""
@@ -416,11 +417,14 @@ class SkillLibrary:
         folder = self.own_dir / name
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "SKILL.md").write_text(text, "utf-8")
-        self.reload()
-        skill = self._skills[name]
+        if reload:
+            self.reload()
+        skill = self._skills.get(name)
+        if skill is None:  # a bulk caller reloads once at the end
+            skill = load_skill(folder, YOURS)
         return skill
 
-    def save_text(self, text: str, name: str = "") -> Skill:
+    def save_text(self, text: str, name: str = "", *, reload: bool = True) -> Skill:
         """Write a skill from the text of a SKILL.md (pasted, uploaded, fetched)."""
         meta, body = parse_front_matter(text)
         skill_name = str(meta.get("name") or name).strip().lower()
@@ -439,6 +443,7 @@ class SkillLibrary:
             metadata={str(k): str(v) for k, v in raw_meta.items()}
             if isinstance(raw_meta, dict)
             else {},
+            reload=reload,
         )
 
     def remove(self, name: str) -> bool:

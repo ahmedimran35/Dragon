@@ -5,7 +5,8 @@ import { DRAGON } from "../avatars";
 import { botMood, defaultBot, isChief, type Presence, type PresenceInput } from "../bots";
 import { Avatar } from "../components/Avatar";
 import { AVATAR_COLORS, AvatarPicker, suggestedFaces, SUGGESTION_COUNT, type AvatarChoice } from "../components/AvatarPicker";
-import { PageBar } from "../components/BackBar";
+import { PageBar } from "../components/PageBar";
+import { EmptyState } from "../components/EmptyState";
 import { ChiefBadge } from "../components/ChiefBadge";
 import {
   FieldLabel,
@@ -290,24 +291,12 @@ export function BotsScreen() {
                 onCancel={() => setEditing(null)}
               />
             ) : bots.length <= 1 ? (
-              <div className="flex min-h-[380px] flex-col items-center justify-center rounded-3xl border border-dashed border-border/70 bg-surface-2/30 px-8 py-12 text-center wide:h-full">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent shadow-sm">
-                  <Plus size={22} />
-                </div>
-                <p className="mt-4 text-[15.5px] font-semibold">
-                  {t("Only {name} so far.", { name: defaultBot(bots, state.profile).name })}
-                </p>
-                <p className="mt-1.5 max-w-[320px] text-[13px] leading-relaxed text-muted">
-                  {t("Add another when a job needs its own face and voice.")}
-                </p>
-                <button
-                  type="button"
-                  onClick={newBot}
-                  className="mt-5 flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[13.5px] font-semibold text-accent-fg shadow-sm transition active:scale-95"
-                >
-                  <Plus size={15} /> {t("New bot")}
-                </button>
-              </div>
+              <EmptyState
+                icon={<Plus size={24} />}
+                headline={t("Only {name} so far.", { name: defaultBot(bots, state.profile).name })}
+                body={t("Add another when a job needs its own face and voice.")}
+                chips={[{ label: t("New bot"), onClick: newBot }]}
+              />
             ) : (
               <div className="flex min-h-[220px] items-center justify-center rounded-3xl border border-border/50 bg-surface-2/20 px-8 py-10 text-center wide:h-full">
                 <p className="max-w-[300px] text-[13px] leading-relaxed text-muted">

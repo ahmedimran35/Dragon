@@ -41,16 +41,3 @@ export function PageBar({
     </header>
   );
 }
-
-/** "Back to chat" on its own, for a screen that draws its own title. */
-export function BackBar({ label = "Chat" }: { label?: string }) {
-  const { setTab } = useStore();
-  const t = useT();
-  return (
-    <div className="mb-1 flex h-12 items-center">
-      <DragonRoundButton small onClick={() => setTab("chat")} label={t(label)}>
-        <ArrowLeft size={20} />
-      </DragonRoundButton>
-    </div>
-  );
-}

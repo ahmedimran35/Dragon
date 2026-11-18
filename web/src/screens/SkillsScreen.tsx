@@ -1,10 +1,12 @@
-import { ChevronRight, FileCode2, Link2, Loader2, Pencil, Play, Plus, Trash2, Wand2 } from "lucide-react";
+import { ChevronRight, Compass, FileCode2, Link2, Loader2, Pencil, Play, Plus, Trash2, Wand2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { PageBar } from "../components/BackBar";
+import { PageBar } from "../components/PageBar";
 import { LoadError } from "../components/LoadError";
+import { EmptyState } from "../components/EmptyState";
 import { DragonRoundButton } from "../components/DragonHeader";
 import { Markdown } from "../components/Markdown";
+import { SkillCatalogScreen } from "./SkillCatalogScreen";
 import { useT } from "../i18n";
 import { useStore } from "../store";
 import type { SkillDetail, SkillInfo, SkillsData } from "../types";
@@ -44,6 +46,7 @@ export function SkillsScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [catalog, setCatalog] = useState(false);
 
   const load = () =>
     api
@@ -58,6 +61,9 @@ export function SkillsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.skillsVersion]);
 
+  if (catalog) {
+    return <SkillCatalogScreen onBack={() => setCatalog(false)} />;
+  }
   if (open) {
     return (
       <SkillView
@@ -92,9 +98,14 @@ export function SkillsScreen() {
         title={t("Skills")}
         description={t("How {name} does a job, written down once. Start one in chat with /name, or just ask; it picks the skill that fits.", { name })}
         actions={
-          <DragonRoundButton small onClick={() => setAdding(true)} label={t("New")}>
-            <Plus size={20} />
-          </DragonRoundButton>
+          <>
+            <DragonRoundButton small onClick={() => setCatalog(true)} label={t("Skill directory")}>
+              <Compass size={20} />
+            </DragonRoundButton>
+            <DragonRoundButton small onClick={() => setAdding(true)} label={t("New")}>
+              <Plus size={20} />
+            </DragonRoundButton>
+          </>
         }
       />
 
@@ -112,16 +123,13 @@ export function SkillsScreen() {
                 {t("Yours")} · {yours.length}
               </div>
               {yours.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-border p-5 text-center">
-                  <Wand2 className="mx-auto text-accent" />
-                  <div className="mt-2 font-semibold">{t("Nothing of your own yet")}</div>
-                  <p className="mt-1 text-[13.5px] text-muted">
-                    {t("After a job went well, tell {name} “save this as a skill”; it writes the steps down and asks you first. Or write one here, or paste a link to a SKILL.md.", { name })}
-                  </p>
-                  <button type="button" onClick={() => setAdding(true)} className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[13.5px] font-semibold text-accent-fg">
-                    <Plus size={15} /> {t("Write one")}
-                  </button>
-                </div>
+                <EmptyState
+                  tone="soft"
+                  icon={<Wand2 size={26} />}
+                  headline={t("Nothing of your own yet")}
+                  body={t("After a job went well, tell {name} “save this as a skill”; it writes the steps down and asks you first. Or write one here, or paste a link to a SKILL.md.", { name })}
+                  chips={[{ label: t("Write one"), onClick: () => setAdding(true) }]}
+                />
               ) : (
                 <SkillList items={yours} onOpen={setOpen} onChange={load} />
               )}

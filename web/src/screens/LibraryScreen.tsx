@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, fileUrl } from "../api";
 import { TabHeader } from "../components/TabHeader";
 import { LoadError } from "../components/LoadError";
+import { EmptyState } from "../components/EmptyState";
 import { useT } from "../i18n";
 import { useStore } from "../store";
 import type { FileInfo } from "../types";
@@ -71,17 +72,11 @@ export function LibraryScreen() {
           </div>
         )}
         {files !== null && shown.length === 0 && (
-          <div className="flex flex-col items-center px-8 pt-9 text-center">
-            <LibraryBig size={34} className="text-muted" />
-            <div className="mt-3.5 text-[16px] font-medium text-muted">
-              {query ? t("No files match.") : segment === 0 ? t("Nothing created yet") : t("No media yet")}
-            </div>
-            {!query && (
-              <p className="mt-1 text-[12px] text-muted">
-                {segment === 0 ? t("Documents, tables and pages I write for you will show up here.") : t("Photos, screenshots and recordings I produce will show up here.")}
-              </p>
-            )}
-          </div>
+          <EmptyState
+            icon={<LibraryBig size={26} />}
+            headline={query ? t("No files match.") : segment === 0 ? t("Nothing created yet") : t("No media yet")}
+            body={query ? undefined : segment === 0 ? t("Documents, tables and pages I write for you will show up here.") : t("Photos, screenshots and recordings I produce will show up here.")}
+          />
         )}
         <ul>
           {shown.map((f) => (

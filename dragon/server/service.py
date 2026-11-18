@@ -370,6 +370,16 @@ class DragonService:
         self._reflecting = False
         self.token = self._load_token()
         self._scheduler: asyncio.Task[None] | None = None
+        # the public skill directory: an optional poller and an in-flight import-all job
+        self._catalog_task: asyncio.Task[None] | None = None
+        self._catalog_import_task: asyncio.Task[None] | None = None
+        self._catalog_job: dict[str, Any] = {
+            "running": False,
+            "done": 0,
+            "total": 0,
+            "failed": 0,
+            "errors": [],
+        }
         # webhook deliveries accepted, by trigger id (monotonic seconds): the rate limit's
         # word while the first run is still going (deliver_hook)
         self._hook_accepted: dict[str, float] = {}
@@ -411,6 +421,10 @@ class DragonService:
         self._started = True
         self._recover_deliveries()
         self._scheduler = asyncio.create_task(self._goal_scheduler(), name="goal-scheduler")
+        if self._catalog_state()["auto_sync"]:
+            self._catalog_task = asyncio.create_task(
+                self._catalog_loop(), name="skill-catalog-sync"
+            )
         self.starting = ""
         logger.info(
             "DragonService started ({} threads, {:.1f}s)",
@@ -442,6 +456,12 @@ class DragonService:
         elif scheduler is not None:
             scheduler.cancel()
         self._scheduler = None
+        for task in (self._catalog_task, self._catalog_import_task):
+            if task is not None:
+                task.cancel()
+                workers.append(task)
+        self._catalog_task = None
+        self._catalog_import_task = None
         for t in self.threads.values():
             work = t.worker
             if work is None or work.done() or work.get_loop() is not loop:
@@ -2007,6 +2027,173 @@ class DragonService:
         self.connections._save()
         self._publish_skills()
         return skill.to_dict()
+
+    # ------------------------------------------------------- public skill directory
+    def _catalog_state(self) -> dict[str, Any]:
+        state = self.connections.data.get("skill_catalog")
+        if not isinstance(state, dict):
+            state = {}
+        return {
+            "auto_sync": bool(state.get("auto_sync")),
+            "seen": list(state.get("seen") or []),
+            "installed": dict(state.get("installed") or {}),
+            "last_sync": str(state.get("last_sync") or ""),
+            "last_error": str(state.get("last_error") or ""),
+        }
+
+    def _save_catalog_state(self, state: dict[str, Any]) -> None:
+        self.connections.data["skill_catalog"] = state
+        self.connections._save()
+
+    async def catalog_view(self, *, refresh: bool = False) -> dict[str, Any]:
+        """The public directory with one line per skill and the state of local imports."""
+        from dragon.skills.catalog import CATALOG_URL, fetch_catalog
+
+        items = await fetch_catalog(refresh=refresh)
+        state = self._catalog_state()
+        installed = state["installed"]
+        job = dict(self._catalog_job)
+        job.pop("_task", None)
+        return {
+            "source": CATALOG_URL,
+            "total": len(items),
+            "items": [
+                {
+                    **item,
+                    "installed": item["slug"] in installed,
+                    "skill": installed.get(item["slug"], ""),
+                }
+                for item in items
+            ],
+            "auto_sync": state["auto_sync"],
+            "last_sync": state["last_sync"],
+            "last_error": state["last_error"],
+            "status": job,
+        }
+
+    async def catalog_import(self, slug: str, *, reload: bool = True) -> dict[str, Any]:
+        """Fetch one catalog skill through the vetted importer. New imports start disabled."""
+        from dragon.skills import fetch_skill_text
+        from dragon.skills.catalog import fetch_catalog, fetch_detail
+
+        items = await fetch_catalog()
+        item = next((x for x in items if x["slug"] == slug), None)
+        if item is None:
+            raise ValueError(f"{slug} is not in the directory")
+        detail = await fetch_detail(slug)
+        state = self._catalog_state()
+        before = {s.name for s in self.app.skills.all() if s.source == "yours"}
+        skill = self.app.skills.save_text(
+            await fetch_skill_text(detail["raw_url"]), item["name"], reload=reload
+        )
+        if skill.name not in before:
+            if not reload:
+                self.app.skills.reload()  # save_text skipped it for bulk work
+            self.set_skill_enabled(skill.name, False)  # persists the disabled list
+        state["installed"][slug] = skill.name
+        if slug not in state["seen"]:
+            state["seen"].append(slug)
+        self._save_catalog_state(state)
+        if reload:
+            self._publish_skills()
+        return {
+            "skill": skill.to_dict(body=True),
+            "license": detail["license"],
+            "github_url": detail["github_url"],
+        }
+
+    def catalog_status(self) -> dict[str, Any]:
+        job = dict(self._catalog_job)
+        job.pop("_task", None)
+        return job
+
+    async def catalog_import_all(self) -> dict[str, Any]:
+        """Start a throttled background import of the whole directory."""
+        from dragon.skills.catalog import fetch_catalog, gather
+
+        if self._catalog_job["running"]:
+            return self.catalog_status()
+        items = await fetch_catalog()
+        self._catalog_job.update(running=True, done=0, total=len(items), failed=0, errors=[])
+
+        async def run() -> None:
+            results = await gather(
+                items, lambda item: self.catalog_import(item["slug"], reload=False)
+            )
+            self.app.skills.reload()
+            errors = [r for r in results if r.get("error")]
+            self._catalog_job.update(
+                running=False,
+                done=len(results) - len(errors),
+                total=len(items),
+                failed=len(errors),
+                errors=[f"{r['slug']}: {r['error']}" for r in errors[:20]],
+            )
+            self._publish_skills()
+            self._catalog_import_task = None
+
+        self._catalog_import_task = asyncio.create_task(run(), name="skill-catalog-import")
+        return self.catalog_status()
+
+    def set_catalog_auto(self, enabled: bool) -> dict[str, Any]:
+        """Turn periodic sync on or off; the first run also fills an empty catalog."""
+        state = self._catalog_state()
+        state["auto_sync"] = bool(enabled)
+        self._save_catalog_state(state)
+        if enabled:
+            if not state["installed"]:
+                spawn(self.catalog_import_all(), "importing the public skill catalog")
+            if self._catalog_task is None or self._catalog_task.done():
+                self._catalog_task = asyncio.create_task(
+                    self._catalog_loop(), name="skill-catalog-sync"
+                )
+        elif self._catalog_task is not None:
+            self._catalog_task.cancel()
+            self._catalog_task = None
+        return self.catalog_view_sync()
+
+    def catalog_view_sync(self) -> dict[str, Any]:
+        state = self._catalog_state()
+        return {
+            "auto_sync": state["auto_sync"],
+            "last_sync": state["last_sync"],
+            "last_error": state["last_error"],
+            "status": self.catalog_status(),
+        }
+
+    async def _catalog_loop(self) -> None:
+        from dragon.skills.catalog import fetch_catalog, gather
+
+        while True:
+            await asyncio.sleep(6 * 3600)
+            if not self._catalog_state()["auto_sync"]:
+                return
+            try:
+                items = await fetch_catalog(refresh=True)
+                state = self._catalog_state()
+                new = [item for item in items if item["slug"] not in state["seen"]]
+                if new:
+                    results = await gather(
+                        new, lambda item: self.catalog_import(item["slug"], reload=False)
+                    )
+                    self.app.skills.reload()
+                    self._publish_skills()
+                    failed = [r for r in results if r.get("error")]
+                    state = self._catalog_state()
+                    state["last_error"] = "; ".join(
+                        f"{r['slug']}: {r['error']}" for r in failed[:5]
+                    )
+                else:
+                    state = self._catalog_state()
+                    state["last_error"] = ""
+                state["last_sync"] = now_iso()
+                self._save_catalog_state(state)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — a bad poll must not kill the loop
+                state = self._catalog_state()
+                state["last_error"] = f"{type(exc).__name__}: {exc}"
+                self._save_catalog_state(state)
 
     def _publish_skills(self) -> None:
         self.bus.publish({"kind": "skills", "skills": self.skills_view()})
